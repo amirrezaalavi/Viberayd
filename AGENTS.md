@@ -24,29 +24,35 @@ viberay/
 │   │   ├── result.go         # TestResult, Summary, ValidationResult
 │   │   ├── context.go        # TestContext, TestDepth, OutputStyle, OrchestratorDecision
 │   │   └── models_test.go
-│   ├── errors/               # Sentinel errors + categorization
-│   │   └── errors.go         # ErrInvalidProtocol, ErrTCPConnect, CategorizedError, etc.
-│   ├── logging/              # Structured logging setup
-│   │   └── logger.go         # slog initialization
+├── errors/               # Sentinel errors + categorization + recovery strategies
+│   ├── errors.go         # ErrInvalidProtocol, ErrTCPConnect, CategorizedError, etc.
+│   ├── recovery.go       # RecoveryAction, Recommend(), StrategyFor()
+│   └── recovery_test.go
+├── logging/              # Structured logging setup
+│   └── logger.go         # slog initialization
 ├── orchestrator/         # AI heuristic decision layer (Phase 5)
 │   ├── decision.go       # Decide(), BuildContext(), UserPreferences
 │   └── decision_test.go
-├── output/               # Output generator (Phase 6)
+├── output/               # Output generator + checkpointing (Phase 6/7)
 │   ├── formatter.go      # Formatter interface + New()
 │   ├── json.go           # JSONFormatter
 │   ├── csv.go            # CSVFormatter
 │   ├── table.go          # TableFormatter
 │   ├── markdown.go       # MarkdownFormatter
 │   ├── exporter.go       # Categorized file export (valid/failed/reality/legacy)
+│   ├── checkpoint.go     # SaveCheckpoint, LoadCheckpoint, RemoveCheckpoint
+│   ├── checkpoint_test.go
 │   └── output_test.go
-├── tester/               # Testing engine (Phase 3)
-│   │   ├── tcp.go            # TCP connectivity tests
-│   │   ├── tls.go            # TLS handshake tests + fingerprinting
-│   │   ├── protocol.go       # Protocol-specific probes
-│   │   ├── xray.go           # Xray process runner + SOCKS5 probe
-│   │   ├── xray_config.go    # Xray JSON config generation (all 5 protocols)
-│   │   ├── pipeline.go       # Pipeline.Run with depth-gated stages
-│   │   └── tester_test.go
+├── tester/               # Testing engine (Phase 3/7)
+│   ├── tcp.go            # TCP connectivity tests
+│   ├── tls.go            # TLS handshake tests + fingerprinting
+│   ├── protocol.go       # Protocol-specific probes
+│   ├── xray.go           # Xray process runner + SOCKS5 probe
+│   ├── xray_config.go    # Xray JSON config generation (all 5 protocols)
+│   ├── pipeline.go       # Pipeline.Run with depth-gated stages
+│   ├── resilience.go     # ResilientRunner with retry/backoff/load reduction
+│   ├── resilience_test.go
+│   └── tester_test.go
 │   ├── concurrency/          # Resource management (Phase 4)
 │   │   ├── port.go           # PortManager + StaggeredAllocator
 │   │   ├── pool.go           # Bounded worker Pool
@@ -133,7 +139,7 @@ See `TODO.md` for the full checklist. As of this writing:
 - ✅ Phase 4 — Concurrency & Resources
 - ✅ Phase 5 — AI Orchestrator (heuristic decision layer)
 - ✅ Phase 6 — Output Generator
-- ⬜ Phase 7 — Error Handling & Resilience
+- ✅ Phase 7 — Error Handling & Resilience
 - ⬜ Phase 8 — CLI Interface
 - ⬜ Phase 9 — Testing & Quality
 - ⬜ Phase 10 — Polish & Ship
@@ -147,3 +153,6 @@ See `TODO.md` for the full checklist. As of this writing:
 - The `Pool.Submit` select can race between semaphore send and `ctx.Done()`. Workers should always check `ctx.Err()` before doing real work.
 - `testViaSOCKS5` in `xray.go` only does a SOCKS5 greeting, not a full CONNECT + HTTP request. This is intentional to avoid importing `golang.org/x/net/proxy`.
 - `orchestrator.Decide()` is intentionally minimal — a single function, not a subsystem. All CLI flags override heuristics.
+- `ResilientRunner` in `resilience.go` caps backoff at 30s (`if wait > 30*time.Second`). This prevents runaway waits on repeated failures.
+- Checkpoint files are written on `SIGINT`/`SIGTERM` only if there are remaining unprocessed configs. The file contains both completed results and the remaining configs list, so a future run could theoretically resume (resume logic not yet implemented).
+- Xray crash auto-restart is deferred because the current `XrayRunner` starts a fresh process per config test anyway. Pool reuse of xray processes (`xray_pool.go`) would be the right place to add restart logic when Phase 4 pooling is more heavily used.

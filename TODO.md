@@ -140,14 +140,14 @@
 ---
 
 ## 🚨 Phase 7: Error Handling & Resilience
-- [ ] Error category taxonomy (parse, network, protocol, resource, runtime)
-- [ ] Recovery strategies per category
-- [ ] Exponential backoff retry (1s, 2s, 4s)
-- [ ] Total per-config timeout (30s)
-- [ ] Partial result saving / checkpoint recovery
-- [ ] Failure categorization and aggregation
-- [ ] Xray crash detection and auto-restart
-- [ ] Reduce parallelism on resource exhaustion
+- [x] Error category taxonomy (parse, network, protocol, resource, runtime)
+- [x] Recovery strategies per category (skip, retry, continue, reduce-load, restart)
+- [x] Exponential backoff retry (1s, 2s, 4s) with 30s cap
+- [x] Total per-config timeout (30s, configurable)
+- [x] Partial result saving / checkpoint recovery on interrupt
+- [x] Failure categorization and aggregation
+- [x] Reduce parallelism on resource exhaustion
+- [ ] Xray crash detection and auto-restart (deferred — xray runner already kills+starts per test)
 
 ---
 

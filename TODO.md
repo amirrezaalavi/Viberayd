@@ -114,29 +114,28 @@
 ---
 
 ## 🤖 Phase 5: AI Orchestrator
-- [ ] System resource analyzer (CPU, memory, OS detection)
-- [ ] Input analyzer (count, protocol distribution, duplicates)
-- [ ] Concurrency decision engine — auto vs manual
-- [ ] Test depth decision engine — quick/standard/full/comprehensive
-- [ ] Output format decision engine — auto-select based on config count
-- [ ] Cache strategy decision — enable if duplicates > 5%
-- [ ] Retry policy decision — 1–3 retries with exponential backoff
-- [ ] Bandwidth allocation per test (1–10 Mbps adaptive)
-- [ ] Timeout adaptation (2–10s based on server response)
+- [x] System resource analyzer (CPU, memory, OS detection)
+- [x] Input analyzer (count, protocol distribution, duplicates)
+- [x] Concurrency decision engine — auto vs manual
+- [x] Test depth decision engine — quick/standard/full/comprehensive
+- [x] Output format decision engine — auto-select based on config count
+- [x] Cache strategy decision — enable if duplicates > 5%
+- [x] Retry policy decision — 1–3 retries with exponential backoff
+- [x] Timeout adaptation (2–10s based on server response)
 
 ---
 
 ## 📤 Phase 6: Output Generator
-- [ ] Summary statistics builder (total, passed, failed, avg latency, success rate)
-- [ ] Per-config detailed result formatter
-- [ ] Error message aggregator
-- [ ] **JSON output** — full machine-readable dump
-- [ ] **CSV output** — summary metrics for batch processing
-- [ ] **Table output** — human-readable key metrics
-- [ ] **Markdown output** — documentation/reports
+- [x] Summary statistics builder (total, passed, failed, avg latency, success rate)
+- [x] Per-config detailed result formatter
+- [x] Error message aggregator
+- [x] **JSON output** — full machine-readable dump
+- [x] **CSV output** — summary metrics for batch processing
+- [x] **Table output** — human-readable key metrics
+- [x] **Markdown output** — documentation/reports
 - [ ] **HTML dashboard output** — interactive view (stretch goal)
-- [ ] Categorized export: `valid/`, `failed/`, `reality/`, `legacy/`
-- [ ] Report file naming with timestamp
+- [x] Categorized export: `valid/`, `failed/`, `reality/`, `legacy/`
+- [x] Report file naming with timestamp
 
 ---
 

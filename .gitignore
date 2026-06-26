@@ -37,3 +37,5 @@ Thumbs.db
 *.tmp
 *.temp
 /tmp/
+working-sharelinks.txt
+not-working-sharelinks.txt

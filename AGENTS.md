@@ -72,6 +72,9 @@ viberay/
 │   ├── trojan.go             # Trojan parser
 │   ├── reality.go            # Reality parser + IsRealityURL detector
 │   └── parser_test.go
+├── pkg/fetcher/              # Remote subscription fetcher (Phase 8)
+│   ├── fetcher.go            # HTTP fetch for subscription URLs
+│   └── fetcher_test.go
 ├── configs/                  # Runtime / example configs (empty, for future use)
 ├── testdata/                 # Test fixtures (empty, for future use)
 ├── go.mod                    # module github.com/amiralavi/viberay
@@ -140,7 +143,7 @@ See `TODO.md` for the full checklist. As of this writing:
 - ✅ Phase 5 — AI Orchestrator (heuristic decision layer)
 - ✅ Phase 6 — Output Generator
 - ✅ Phase 7 — Error Handling & Resilience
-- ⬜ Phase 8 — CLI Interface
+- ✅ Phase 8 — CLI Interface
 - ⬜ Phase 9 — Testing & Quality
 - ⬜ Phase 10 — Polish & Ship
 

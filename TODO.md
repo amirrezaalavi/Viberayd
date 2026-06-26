@@ -152,18 +152,21 @@
 ---
 
 ## 📊 Phase 8: CLI Interface
-- [ ] Input flags: file path, stdin, URL, subscription
-- [ ] `--concurrency` flag (auto default, manual override)
-- [ ] `--depth` flag (quick/standard/full/comprehensive)
-- [ ] `--output` flag (json/csv/table/markdown/auto)
-- [ ] `--timeout` flag
-- [ ] `--port-base` flag
-- [ ] `--xray-bin` flag
-- [ ] `--retry` flag
-- [ ] `--verbose` / `--debug` log level flags
-- [ ] `--cache` on/off flag
-- [ ] Progress bar / live stats display
-- [ ] Graceful interrupt handling (Ctrl+C → save partial results)
+- [x] Input flags: file path, stdin, URL, subscription
+- [x] `--concurrency` flag (auto default, manual override)
+- [x] `--depth` flag (quick/standard/full/comprehensive/auto)
+- [x] `--output` flag (json/csv/table/markdown/html/auto)
+- [x] `--timeout` flag
+- [x] `--port-base` flag
+- [x] `--xray-bin` flag
+- [x] `--retry` flag
+- [x] `--verbose` / `--quiet` log level flags
+- [x] `--no-cache` flag
+- [x] `--out-dir` categorized export flag
+- [x] `--checkpoint-dir` checkpoint location flag
+- [x] `--resume` from checkpoint flag
+- [x] Progress display (stderr, % complete)
+- [x] Graceful interrupt handling (Ctrl+C → save partial results)
 
 ---
 

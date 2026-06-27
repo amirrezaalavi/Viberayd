@@ -1,6 +1,6 @@
 # VibeRay — AI-Driven Xray Configuration Testing System
 
-## 🏗️ Phase 0: Project Scaffolding
+## Phase 0: Project Scaffolding
 - [x] Initialize Go module (`go mod init github.com/...`)
 - [x] Set up directory structure: `cmd/`, `internal/`, `pkg/`, `configs/`, `testdata/`
 - [x] Add `main.go` entry point with CLI flag parsing
@@ -10,7 +10,7 @@
 
 ---
 
-## 📦 Phase 1: Data Models & Config Types
+## Phase 1: Data Models & Config Types
 - [x] Define `ProxyConfig` base struct (server, port, protocol, name, remarks)
 - [x] Implement `SSConfig` — method, password, plugin, plugin-opts
 - [x] Implement `VMessConfig` — uuid, aid, security, network, tls, path, host, sni
@@ -24,7 +24,7 @@
 
 ---
 
-## 🔍 Phase 2: Parser Engine
+## Phase 2: Parser Engine
 - [x] Build protocol detector — identify SS, VMess, VLess, Trojan, Reality from URI prefix
 - [x] Implement encoding detector — base64 vs plain text
 - [x] Implement fragment extractor — parse `#name` suffix
@@ -48,7 +48,7 @@
 
 ---
 
-## 🧪 Phase 3: Testing Engine
+## Phase 3: Testing Engine
 
 ### TCP Layer
 - [x] Implement raw TCP connectivity test (configurable timeout 3–5s)
@@ -84,7 +84,7 @@
 
 ---
 
-## ⚡ Phase 4: Concurrency & Resource Management
+## Phase 4: Concurrency & Resource Management
 
 ### Port Manager
 - [x] Implement port allocator (base 10820, range 100)
@@ -113,7 +113,7 @@
 
 ---
 
-## 🤖 Phase 5: AI Orchestrator
+## Phase 5: AI Orchestrator
 - [x] System resource analyzer (CPU, memory, OS detection)
 - [x] Input analyzer (count, protocol distribution, duplicates)
 - [x] Concurrency decision engine — auto vs manual
@@ -125,21 +125,20 @@
 
 ---
 
-## 📤 Phase 6: Output Generator
-- [x] Summary statistics builder (total, passed, failed, avg latency, success rate)
-- [x] Per-config detailed result formatter
-- [x] Error message aggregator
-- [x] **JSON output** — full machine-readable dump
-- [x] **CSV output** — summary metrics for batch processing
-- [x] **Table output** — human-readable key metrics
-- [x] **Markdown output** — documentation/reports
+## Phase 6: Output Generator
+- [x] Store original raw URI in `ProxyConfig.Raw` field during parsing
+- [x] All formatters output only working configs as raw URI + latency
+- [x] **Table output** — `<raw URI> <latency>` per line (default)
+- [x] **JSON output** — working configs as `{"uri": "...", "latency": "..."}`
+- [x] **CSV output** — working configs as `raw-uri,latency` rows
+- [x] **Markdown output** — working configs table with raw URI + latency
 - [ ] **HTML dashboard output** — interactive view (stretch goal)
 - [x] Categorized export: `valid/`, `failed/`, `reality/`, `legacy/`
 - [x] Report file naming with timestamp
 
 ---
 
-## 🚨 Phase 7: Error Handling & Resilience
+## Phase 7: Error Handling & Resilience
 - [x] Error category taxonomy (parse, network, protocol, resource, runtime)
 - [x] Recovery strategies per category (skip, retry, continue, reduce-load, restart)
 - [x] Exponential backoff retry (1s, 2s, 4s) with 30s cap
@@ -151,7 +150,7 @@
 
 ---
 
-## 📊 Phase 8: CLI Interface
+## Phase 8: CLI Interface
 - [x] Input flags: file path, stdin, URL, subscription
 - [x] `--concurrency` flag (auto default, manual override)
 - [x] `--depth` flag (quick/standard/full/comprehensive/auto)
@@ -166,11 +165,11 @@
 - [x] `--checkpoint-dir` checkpoint location flag
 - [x] `--resume` from checkpoint flag
 - [x] Progress display (stderr, % complete)
-- [x] Graceful interrupt handling (Ctrl+C → save partial results)
+- [x] Graceful interrupt handling (Ctrl+C -> save partial results)
 
 ---
 
-## 🧪 Phase 9: Testing & Quality
+## Phase 9: Testing & Quality
 - [ ] Unit tests for all parsers (SS, VMess, VLess, Trojan, Reality)
 - [ ] Unit tests for validators
 - [ ] Unit tests for port manager
@@ -184,8 +183,8 @@
 
 ---
 
-## 🚀 Phase 10: Polish & Ship
-- [ ] README with usage examples
+## Phase 10: Polish & Ship
+- [x] README with usage examples
 - [ ] Example input files (one per protocol)
 - [ ] Dockerfile with Xray binary included
 - [ ] CI pipeline (lint, test, build)
@@ -194,7 +193,7 @@
 
 ---
 
-## 📌 Dependencies (to evaluate)
+## Dependencies (to evaluate)
 - CLI: `cobra` or `urfave/cli`
 - Logging: `zerolog` or `slog` (stdlib)
 - YAML: `gopkg.in/yaml.v3`
@@ -207,9 +206,9 @@
 ---
 
 ## Priority Order
-1. **Phase 0–1**: Scaffolding + models (foundation)
+1. **Phase 0-1**: Scaffolding + models (foundation)
 2. **Phase 2**: Parser engine (core value — parse all proxy types)
-3. **Phase 3–4**: Testing engine + concurrency (core value — test configs)
+3. **Phase 3-4**: Testing engine + concurrency (core value — test configs)
 4. **Phase 5**: AI orchestrator (intelligence layer)
-5. **Phase 6–7**: Output + error handling (completeness)
-6. **Phase 8–10**: CLI, tests, polish (ship-ready)
+5. **Phase 6-7**: Output + error handling (completeness)
+6. **Phase 8-10**: CLI, tests, polish (ship-ready)

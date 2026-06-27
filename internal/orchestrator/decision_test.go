@@ -53,7 +53,7 @@ func TestDecide_Style(t *testing.T) {
 		override models.OutputStyle
 		want     models.OutputStyle
 	}{
-		{"tiny", 3, models.StyleAuto, models.StyleJSON},
+		{"tiny", 3, models.StyleAuto, models.StyleTable},
 		{"small", 50, models.StyleAuto, models.StyleTable},
 		{"large", 200, models.StyleAuto, models.StyleCSV},
 		{"override", 200, models.StyleMarkdown, models.StyleMarkdown},

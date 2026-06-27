@@ -84,35 +84,35 @@ func ParseSingle(raw string) (models.ProxyConfig, error) {
 		if err != nil {
 			return models.ProxyConfig{}, err
 		}
-		return models.ProxyConfig{SS: cfg}, nil
+		return models.ProxyConfig{SS: cfg, Raw: raw}, nil
 
 	case models.ProtocolVMess:
 		cfg, err := parseVMess(raw)
 		if err != nil {
 			return models.ProxyConfig{}, err
 		}
-		return models.ProxyConfig{VMess: cfg}, nil
+		return models.ProxyConfig{VMess: cfg, Raw: raw}, nil
 
 	case models.ProtocolVLess:
 		cfg, err := parseVLess(raw)
 		if err != nil {
 			return models.ProxyConfig{}, err
 		}
-		return models.ProxyConfig{VLess: cfg}, nil
+		return models.ProxyConfig{VLess: cfg, Raw: raw}, nil
 
 	case models.ProtocolTrojan:
 		cfg, err := parseTrojan(raw)
 		if err != nil {
 			return models.ProxyConfig{}, err
 		}
-		return models.ProxyConfig{Trojan: cfg}, nil
+		return models.ProxyConfig{Trojan: cfg, Raw: raw}, nil
 
 	case models.ProtocolReality:
 		cfg, err := parseReality(raw)
 		if err != nil {
 			return models.ProxyConfig{}, err
 		}
-		return models.ProxyConfig{Reality: cfg}, nil
+		return models.ProxyConfig{Reality: cfg, Raw: raw}, nil
 
 	default:
 		return models.ProxyConfig{}, errors.ErrInvalidProtocol

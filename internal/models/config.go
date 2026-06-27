@@ -126,6 +126,7 @@ type ProxyConfig struct {
 	VLess   *VLessConfig
 	Trojan  *TrojanConfig
 	Reality *RealityConfig
+	Raw     string `json:"raw,omitempty" yaml:"raw,omitempty"` // original input URI
 }
 
 // Protocol returns the detected protocol, or empty string if unset.

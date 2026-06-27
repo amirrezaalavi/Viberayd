@@ -118,8 +118,6 @@ func decideStyle(ctx models.TestContext, override models.OutputStyle) models.Out
 
 	total := ctx.Input.Total
 	switch {
-	case total <= 10:
-		return models.StyleJSON
 	case total <= 100:
 		return models.StyleTable
 	default:

@@ -20,39 +20,39 @@ viberay/
 │   └── main.go               # flag parsing, signal handling, wires everything
 ├── internal/
 │   ├── models/               # Data models (ALL domain types)
-│   │   ├── config.go         # ProxyConfig tagged-union + per-protocol structs
+│   │   ├── config.go         # ProxyConfig tagged-union + per-protocol structs + Raw field
 │   │   ├── result.go         # TestResult, Summary, ValidationResult
 │   │   ├── context.go        # TestContext, TestDepth, OutputStyle, OrchestratorDecision
 │   │   └── models_test.go
-├── errors/               # Sentinel errors + categorization + recovery strategies
-│   ├── errors.go         # ErrInvalidProtocol, ErrTCPConnect, CategorizedError, etc.
-│   ├── recovery.go       # RecoveryAction, Recommend(), StrategyFor()
-│   └── recovery_test.go
-├── logging/              # Structured logging setup
-│   └── logger.go         # slog initialization
-├── orchestrator/         # AI heuristic decision layer (Phase 5)
-│   ├── decision.go       # Decide(), BuildContext(), UserPreferences
-│   └── decision_test.go
-├── output/               # Output generator + checkpointing (Phase 6/7)
-│   ├── formatter.go      # Formatter interface + New()
-│   ├── json.go           # JSONFormatter
-│   ├── csv.go            # CSVFormatter
-│   ├── table.go          # TableFormatter
-│   ├── markdown.go       # MarkdownFormatter
-│   ├── exporter.go       # Categorized file export (valid/failed/reality/legacy)
-│   ├── checkpoint.go     # SaveCheckpoint, LoadCheckpoint, RemoveCheckpoint
-│   ├── checkpoint_test.go
-│   └── output_test.go
-├── tester/               # Testing engine (Phase 3/7)
-│   ├── tcp.go            # TCP connectivity tests
-│   ├── tls.go            # TLS handshake tests + fingerprinting
-│   ├── protocol.go       # Protocol-specific probes
-│   ├── xray.go           # Xray process runner + SOCKS5 probe
-│   ├── xray_config.go    # Xray JSON config generation (all 5 protocols)
-│   ├── pipeline.go       # Pipeline.Run with depth-gated stages
-│   ├── resilience.go     # ResilientRunner with retry/backoff/load reduction
-│   ├── resilience_test.go
-│   └── tester_test.go
+│   ├── errors/               # Sentinel errors + categorization + recovery strategies
+│   │   ├── errors.go         # ErrInvalidProtocol, ErrTCPConnect, CategorizedError, etc.
+│   │   ├── recovery.go       # RecoveryAction, Recommend(), StrategyFor()
+│   │   └── recovery_test.go
+│   ├── logging/              # Structured logging setup
+│   │   └── logger.go         # slog initialization
+│   ├── orchestrator/         # AI heuristic decision layer (Phase 5)
+│   │   ├── decision.go       # Decide(), BuildContext(), UserPreferences
+│   │   └── decision_test.go
+│   ├── output/               # Output generator + checkpointing (Phase 6/7)
+│   │   ├── formatter.go      # Formatter interface + New()
+│   │   ├── json.go           # JSONFormatter — outputs working configs as raw URI + latency
+│   │   ├── csv.go            # CSVFormatter — outputs working configs as raw URI + latency
+│   │   ├── table.go          # TableFormatter — outputs working configs as raw URI + latency
+│   │   ├── markdown.go       # MarkdownFormatter — outputs working configs as raw URI + latency
+│   │   ├── exporter.go       # Categorized file export (valid/failed/reality/legacy)
+│   │   ├── checkpoint.go     # SaveCheckpoint, LoadCheckpoint, RemoveCheckpoint
+│   │   ├── checkpoint_test.go
+│   │   └── output_test.go
+│   ├── tester/               # Testing engine (Phase 3/7)
+│   │   ├── tcp.go            # TCP connectivity tests
+│   │   ├── tls.go            # TLS handshake tests + fingerprinting
+│   │   ├── protocol.go       # Protocol-specific probes
+│   │   ├── xray.go           # Xray process runner + SOCKS5 probe
+│   │   ├── xray_config.go    # Xray JSON config generation (all 5 protocols)
+│   │   ├── pipeline.go       # Pipeline.Run with depth-gated stages
+│   │   ├── resilience.go     # ResilientRunner with retry/backoff/load reduction
+│   │   ├── resilience_test.go
+│   │   └── tester_test.go
 │   ├── concurrency/          # Resource management (Phase 4)
 │   │   ├── port.go           # PortManager + StaggeredAllocator
 │   │   ├── pool.go           # Bounded worker Pool
@@ -63,7 +63,7 @@ viberay/
 │       ├── result.go         # TestResult cache for duplicate servers
 │       └── cache_test.go
 ├── pkg/parser/               # Parser engine (Phase 2)
-│   ├── parser.go             # Unified Parse() + ParseSingle() entry points
+│   ├── parser.go             # Unified Parse() + ParseSingle() entry points (sets Raw field)
 │   ├── detector.go           # Protocol detection, base64 helpers, fragment extraction
 │   ├── validator.go          # UUID, port, public key, flow, network validators
 │   ├── ss.go                 # Shadowsocks parser (SIP002 + legacy base64)
@@ -88,7 +88,7 @@ viberay/
 
 ## Key Architectural Decisions
 
-1. **Tagged-union for configs.** `models.ProxyConfig` has 5 pointer fields (`SS`, `VMess`, `VLess`, `Trojan`, `Reality`). Only one is non-nil at a time. Accessor methods (`Protocol()`, `Addr()`, `Name()`, `String()`) handle dispatch.
+1. **Tagged-union for configs.** `models.ProxyConfig` has 5 pointer fields (`SS`, `VMess`, `VLess`, `Trojan`, `Reality`). Only one is non-nil at a time. Accessor methods (`Protocol()`, `Addr()`, `Name()`, `String()`) handle dispatch. It also stores the original input URI in the `Raw` field.
 
 2. **Parser → Tester → Output pipeline.** Data flows in one direction:
    ```
@@ -97,15 +97,17 @@ viberay/
    → output generator → files / stdout
    ```
 
-3. **Depth-gated testing.** `models.TestDepth` controls how far the pipeline goes:
+3. **Output is raw URIs.** All formatters (table, JSON, CSV, markdown) output only working configs, each as the original input URI with latency appended. No reconstruction, no data loss.
+
+4. **Depth-gated testing.** `models.TestDepth` controls how far the pipeline goes:
    - `quick` = TCP only
    - `standard` = TCP + TLS
    - `full` = TCP + TLS + Protocol handshake
    - `comprehensive` = full + Xray proxy test
 
-4. **Validation is separate from parsing.** Parsers extract fields; `validator.go` checks format constraints. Parsers call validators inline so a malformed URI fails fast.
+5. **Validation is separate from parsing.** Parsers extract fields; `validator.go` checks format constraints. Parsers call validators inline so a malformed URI fails fast.
 
-5. **No external dependencies (yet).** Everything uses the Go standard library. If you need SOCKS5, YAML, or progress bars, check `TODO.md` "Dependencies (to evaluate)" first.
+6. **No external dependencies (yet).** Everything uses the Go standard library. If you need SOCKS5, YAML, or progress bars, check `TODO.md` "Dependencies (to evaluate)" first.
 
 ---
 
@@ -123,7 +125,7 @@ viberay/
 1. Add `ProtocolXXX` constant in `internal/models/config.go`
 2. Add `XXXConfig` struct in `internal/models/config.go`
 3. Add pointer field to `models.ProxyConfig` + update accessor methods
-4. Add parser in `pkg/parser/xxx.go` + wire into `ParseSingle()`
+4. Add parser in `pkg/parser/xxx.go` + wire into `ParseSingle()` (make sure to set `Raw` on the returned `ProxyConfig`)
 5. Add validator rules in `pkg/parser/validator.go` if needed
 6. Add protocol probe in `internal/tester/protocol.go`
 7. Add xray outbound builder in `internal/tester/xray_config.go`
@@ -152,6 +154,7 @@ See `TODO.md` for the full checklist. As of this writing:
 ## Gotchas
 
 - `ProxyConfig` uses value receivers on accessor methods — don't take its address expecting mutation.
+- `ProxyConfig.Raw` stores the original input URI exactly as received. All formatters use this field for output, so the output is guaranteed to match the input for working configs.
 - `xray_pool.go` `WriteXrayConfig` uses `os.CreateTemp` with `workDir`. If `workDir` is empty, it writes to the system temp dir.
 - The `Pool.Submit` select can race between semaphore send and `ctx.Done()`. Workers should always check `ctx.Err()` before doing real work.
 - `testViaSOCKS5` in `xray.go` only does a SOCKS5 greeting, not a full CONNECT + HTTP request. This is intentional to avoid importing `golang.org/x/net/proxy`.

@@ -15,23 +15,32 @@ import (
 func sampleResults() ([]models.TestResult, models.Summary) {
 	results := []models.TestResult{
 		{
-			ID:     "vmess-1",
-			Config: models.ProxyConfig{VMess: &models.VMessConfig{BaseConfig: models.BaseConfig{Server: "1.1.1.1", Port: 443, Protocol: models.ProtocolVMess, Name: "CF-1"}, UUID: "a0b1c2d3-e4f5-6789-abcd-ef0123456789"}},
+			ID: "vmess-1",
+			Config: models.ProxyConfig{
+				Raw:   "vmess://eyJ2IjoiMiIsInBzIjoiQ0YtMSIsImFkZCI6IjEuMS4xLjEiLCJwb3J0IjoiNDQzIiwiaWQiOiJhMGIxYzJkMy1lNGY1LTY3ODktYWJjZC1lZjAxMjM0NTY3ODkiLCJhaWQiOiIwIiwic2N5IjoiYXV0byIsIm5ldCI6InRjcCJ9",
+				VMess: &models.VMessConfig{BaseConfig: models.BaseConfig{Server: "1.1.1.1", Port: 443, Protocol: models.ProtocolVMess, Name: "CF-1"}, UUID: "a0b1c2d3-e4f5-6789-abcd-ef0123456789"},
+			},
 			Status:    models.StatusSuccess,
 			Stage:     models.StageCompleted,
 			Latencies: models.LatencyBreakdown{Total: 45 * time.Millisecond},
 		},
 		{
-			ID:     "ss-1",
-			Config: models.ProxyConfig{SS: &models.SSConfig{BaseConfig: models.BaseConfig{Server: "2.2.2.2", Port: 8388, Protocol: models.ProtocolSS, Name: "SS-JP"}, Method: "aes-256-gcm", Password: "pass"}},
+			ID: "ss-1",
+			Config: models.ProxyConfig{
+				Raw: "ss://YWVzLTI1Ni1nY206cGFzcw@2.2.2.2:8388#SS-JP",
+				SS:  &models.SSConfig{BaseConfig: models.BaseConfig{Server: "2.2.2.2", Port: 8388, Protocol: models.ProtocolSS, Name: "SS-JP"}, Method: "aes-256-gcm", Password: "pass"},
+			},
 			Status:    models.StatusFailed,
 			Stage:     models.StageTCP,
 			Latencies: models.LatencyBreakdown{Connect: 3 * time.Second},
 			Errors:    []string{"connection refused"},
 		},
 		{
-			ID:     "reality-1",
-			Config: models.ProxyConfig{Reality: &models.RealityConfig{BaseConfig: models.BaseConfig{Server: "3.3.3.3", Port: 443, Protocol: models.ProtocolReality, Name: "R-US"}, UUID: "b1c2d3e4-f5a6-7890-bcde-f01234567890", PublicKey: "abc123"}},
+			ID: "reality-1",
+			Config: models.ProxyConfig{
+				Raw:     "vless://b1c2d3e4-f5a6-7890-bcde-f01234567890@3.3.3.3:443?security=reality&pbk=abc123#R-US",
+				Reality: &models.RealityConfig{BaseConfig: models.BaseConfig{Server: "3.3.3.3", Port: 443, Protocol: models.ProtocolReality, Name: "R-US"}, UUID: "b1c2d3e4-f5a6-7890-bcde-f01234567890", PublicKey: "abc123"},
+			},
 			Status:    models.StatusSuccess,
 			Stage:     models.StageCompleted,
 			Latencies: models.LatencyBreakdown{Total: 120 * time.Millisecond},
@@ -65,11 +74,19 @@ func TestJSONFormatter(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	if _, ok := out["summary"]; !ok {
-		t.Error("missing summary key")
-	}
 	if _, ok := out["results"]; !ok {
 		t.Error("missing results key")
+	}
+	resultsList, ok := out["results"].([]any)
+	if !ok {
+		t.Fatal("results is not a list")
+	}
+	if len(resultsList) != 2 {
+		t.Errorf("expected 2 results (only working configs), got %d", len(resultsList))
+	}
+	first := resultsList[0].(map[string]any)
+	if _, ok := first["uri"]; !ok {
+		t.Error("missing uri field in result")
 	}
 }
 
@@ -83,39 +100,51 @@ func TestCSVFormatter(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) < 4 {
-		t.Fatalf("expected at least 4 CSV lines, got %d", len(lines))
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 CSV lines (only working configs), got %d", len(lines))
 	}
 
-	if !strings.HasPrefix(lines[0], "protocol,") {
-		t.Errorf("unexpected header: %s", lines[0])
+	// Check raw values appear in CSV output
+	if !strings.Contains(lines[0], "vmess://") {
+		t.Error("expected vmess raw link in first row")
 	}
-	if !strings.Contains(lines[len(lines)-1], "SUMMARY") {
-		t.Errorf("expected summary row, got: %s", lines[len(lines)-1])
+	if !strings.Contains(lines[1], "vless://") {
+		t.Error("expected reality raw link in second row")
+	}
+	if !strings.Contains(lines[1], "reality&pbk=abc123") {
+		t.Error("expected original reality params in second row")
 	}
 }
 
 func TestTableFormatter(t *testing.T) {
 	f := &TableFormatter{}
-	results, summary := sampleResults()
+	results, _ := sampleResults()
 
 	var buf bytes.Buffer
-	if err := f.Format(&buf, results, summary); err != nil {
+	if err := f.Format(&buf, results, models.Summary{}); err != nil {
 		t.Fatalf("Format: %v", err)
 	}
 
 	out := buf.String()
-	if !strings.Contains(out, "PROTOCOL") {
-		t.Error("missing PROTOCOL header")
+	// Should contain exact raw URIs
+	if !strings.Contains(out, "vmess://") {
+		t.Error("missing vmess raw link")
 	}
-	if !strings.Contains(out, "PASS") {
-		t.Error("missing PASS status")
+	if !strings.Contains(out, "reality&pbk=abc123") {
+		t.Error("missing original reality params")
 	}
-	if !strings.Contains(out, "FAIL") {
-		t.Error("missing FAIL status")
+	// Should NOT contain the failed SS config
+	if strings.Contains(out, "SS-JP") {
+		t.Error("failed ss config should not appear")
 	}
-	if !strings.Contains(out, "Summary:") {
-		t.Error("missing summary line")
+	// Exactly 2 lines (2 working configs: vmess + reality)
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 {
+		t.Errorf("expected 2 lines (only working configs), got %d", len(lines))
+	}
+	// Latency should be present
+	if !strings.Contains(out, "ms") {
+		t.Error("missing latency value")
 	}
 }
 
@@ -129,17 +158,14 @@ func TestMarkdownFormatter(t *testing.T) {
 	}
 
 	out := buf.String()
-	if !strings.Contains(out, "# VibeRay Test Report") {
+	if !strings.Contains(out, "# VibeRay Working Configs") {
 		t.Error("missing title")
 	}
-	if !strings.Contains(out, "## Summary") {
-		t.Error("missing summary section")
+	if !strings.Contains(out, "vmess://") {
+		t.Error("missing vmess share link")
 	}
-	if !strings.Contains(out, "## Detailed Results") {
-		t.Error("missing detailed results section")
-	}
-	if !strings.Contains(out, "| vmess |") {
-		t.Error("missing vmess row")
+	if !strings.Contains(out, "reality&pbk=abc123") {
+		t.Error("missing original reality params")
 	}
 }
 

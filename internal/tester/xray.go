@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -122,41 +123,32 @@ func (xr *XrayRunner) TestXrayProxy(ctx context.Context, cfg models.ProxyConfig,
 	}
 }
 
-// testViaSOCKS5 performs a minimal HTTP GET through a SOCKS5 proxy.
-// We use a simple TCP dial + SOCKS5 CONNECT instead of importing a
-// library to keep dependencies minimal.
+// testViaSOCKS5 performs a real HTTP GET through a SOCKS5 proxy.
 func testViaSOCKS5(proxyAddr, targetURL string, timeout time.Duration) (int, error) {
-	// Minimal implementation: use http.Client with a custom DialContext
-	// that speaks SOCKS5. To avoid external deps we do a raw handshake.
 	u := targetURL
 	if !strings.HasPrefix(u, "http") {
 		u = "http://" + u
 	}
 
-	// For now, use a direct connection to verify the proxy is listening.
-	// Full SOCKS5 implementation would need golang.org/x/net/proxy.
-	// We check port binding as a proxy indicator.
-	conn, err := netDialWithTimeout("tcp", proxyAddr, timeout)
+	proxyURL, err := url.Parse("socks5://" + proxyAddr)
 	if err != nil {
-		return 0, fmt.Errorf("socks dial: %w", err)
+		return 0, fmt.Errorf("invalid proxy address: %w", err)
 	}
-	defer conn.Close()
 
-	// Send a trivial SOCKS5 greeting
-	if _, err := conn.Write([]byte{0x05, 0x01, 0x00}); err != nil {
-		return 0, fmt.Errorf("socks greeting: %w", err)
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		},
+		Timeout: timeout,
 	}
-	resp := make([]byte, 2)
-	if _, err := conn.Read(resp); err != nil {
-		return 0, fmt.Errorf("socks response: %w", err)
+
+	resp, err := client.Get(u)
+	if err != nil {
+		return 0, fmt.Errorf("socks GET request failed: %w", err)
 	}
-	if resp[0] != 0x05 {
-		return 0, fmt.Errorf("unexpected socks version: 0x%02x", resp[0])
-	}
-	// SOCKS5 accepted — xray is running and listening.
-	// A full CONNECT + HTTP request would require parsing the target URL
-	// and encoding the domain/port. We return success as a proxy-ready signal.
-	return http.StatusOK, nil
+	defer resp.Body.Close()
+
+	return resp.StatusCode, nil
 }
 
 func netDialWithTimeout(network, address string, timeout time.Duration) (net.Conn, error) {

@@ -5,6 +5,7 @@ import (
 	"net"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/amiralavi/viberay/internal/errors"
 	"github.com/amiralavi/viberay/internal/models"
@@ -29,16 +30,16 @@ var ValidSecurityTypes = map[string]bool{
 
 // ValidFlowValues lists accepted VLESS / Trojan flow values.
 var ValidFlowValues = map[string]bool{
-	"": true,
-	"xtls-rprx-direct": true,
-	"xtls-rprx-origin": true,
-	"xtls-rprx-vision": true,
+	"":                        true,
+	"xtls-rprx-direct":        true,
+	"xtls-rprx-origin":        true,
+	"xtls-rprx-vision":        true,
 	"xtls-rprx-vision-udp443": true,
 }
 
 // ValidFingerprints lists accepted TLS fingerprint values.
 var ValidFingerprints = map[string]bool{
-	"": true,
+	"":       true,
 	"chrome": true, "firefox": true, "safari": true,
 	"ios": true, "android": true, "edge": true, "360": true,
 	"qq": true, "random": true, "randomized": true,
@@ -46,10 +47,10 @@ var ValidFingerprints = map[string]bool{
 
 // ValidPlugins lists accepted Shadowsocks plugin names.
 var ValidPlugins = map[string]bool{
-	"": true,
-	"obfs-local": true,
+	"":             true,
+	"obfs-local":   true,
 	"v2ray-plugin": true,
-	"simple-obfs": true,
+	"simple-obfs":  true,
 }
 
 // ValidateUUID checks standard 8-4-4-4-12 format (and 32-char fallback).
@@ -81,6 +82,12 @@ func ValidatePortInt(p int) error {
 func ValidatePublicKey(s string) error {
 	if len(s) == 0 {
 		return errors.ErrInvalidPublicKey
+	}
+	// Normalize for URL-safe base64 and handle unpadded input
+	s = strings.ReplaceAll(s, "-", "+")
+	s = strings.ReplaceAll(s, "_", "/")
+	if pad := len(s) % 4; pad != 0 {
+		s += strings.Repeat("=", 4-pad)
 	}
 	b, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {

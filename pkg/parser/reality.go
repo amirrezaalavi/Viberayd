@@ -31,6 +31,11 @@ func parseReality(raw string) (*models.RealityConfig, error) {
 	}
 
 	q := u.Query()
+	path := q.Get("path")
+	if path == "" && q.Get("type") == "grpc" {
+		path = q.Get("serviceName")
+	}
+
 	cfg := &models.RealityConfig{
 		BaseConfig: models.BaseConfig{
 			Server:   u.Hostname(),
@@ -43,7 +48,7 @@ func parseReality(raw string) (*models.RealityConfig, error) {
 			Enabled:     true, // Reality is always TLS-like
 			SNI:         q.Get("sni"),
 			Host:        q.Get("host"),
-			Path:        q.Get("path"),
+			Path:        path,
 			Fingerprint: q.Get("fp"),
 		},
 		UUID:      uuid,
@@ -55,7 +60,7 @@ func parseReality(raw string) (*models.RealityConfig, error) {
 	if cfg.Network == "" {
 		cfg.Network = "tcp"
 	}
-	if cfg.Flow == "" {
+	if cfg.Flow == "" && cfg.Network == "tcp" {
 		cfg.Flow = "xtls-rprx-vision"
 	}
 

@@ -252,7 +252,7 @@ func buildTrojanOutbound(cfg *models.TrojanConfig) map[string]any {
 	}
 
 	stream := map[string]any{
-		"network": cfg.Network,
+		"network":  cfg.Network,
 		"security": "tls",
 	}
 	if cfg.Network == "" {
@@ -311,9 +311,10 @@ func buildRealityOutbound(cfg *models.RealityConfig) map[string]any {
 		"port":    cfg.Port,
 		"users": []map[string]any{
 			{
-				"id":    cfg.UUID,
-				"flow":  cfg.Flow,
-				"level": 0,
+				"id":         cfg.UUID,
+				"flow":       cfg.Flow,
+				"encryption": "none",
+				"level":      0,
 			},
 		},
 	}
@@ -327,9 +328,9 @@ func buildRealityOutbound(cfg *models.RealityConfig) map[string]any {
 	}
 
 	realitySettings := map[string]any{
-		"publicKey": cfg.PublicKey,
-		"shortId":   cfg.ShortID,
-		"spiderX":   cfg.SpiderX,
+		"publicKey":   cfg.PublicKey,
+		"shortId":     cfg.ShortID,
+		"spiderX":     cfg.SpiderX,
 		"fingerprint": cfg.Fingerprint,
 	}
 	if cfg.SNI != "" {
@@ -339,6 +340,27 @@ func buildRealityOutbound(cfg *models.RealityConfig) map[string]any {
 		realitySettings["fingerprint"] = "chrome"
 	}
 	stream["realitySettings"] = realitySettings
+
+	if cfg.Host != "" || cfg.Path != "" {
+		switch cfg.Network {
+		case "ws":
+			stream["wsSettings"] = map[string]any{
+				"path": cfg.Path,
+				"headers": map[string]any{
+					"Host": cfg.Host,
+				},
+			}
+		case "grpc":
+			stream["grpcSettings"] = map[string]any{
+				"serviceName": cfg.Path,
+			}
+		case "h2", "http":
+			stream["httpSettings"] = map[string]any{
+				"path": cfg.Path,
+				"host": []string{cfg.Host},
+			}
+		}
+	}
 
 	return map[string]any{
 		"tag":      "proxy",

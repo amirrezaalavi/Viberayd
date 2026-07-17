@@ -27,6 +27,11 @@ func parseVLess(raw string) (*models.VLessConfig, error) {
 	}
 
 	q := u.Query()
+	path := q.Get("path")
+	if path == "" && q.Get("type") == "grpc" {
+		path = q.Get("serviceName")
+	}
+
 	cfg := &models.VLessConfig{
 		BaseConfig: models.BaseConfig{
 			Server:   u.Hostname(),
@@ -39,7 +44,7 @@ func parseVLess(raw string) (*models.VLessConfig, error) {
 			Enabled:     q.Get("security") == "tls" || q.Get("security") == "xtls" || q.Get("security") == "reality",
 			SNI:         q.Get("sni"),
 			Host:        q.Get("host"),
-			Path:        q.Get("path"),
+			Path:        path,
 			ALPN:        q.Get("alpn"),
 			Fingerprint: q.Get("fp"),
 			SkipVerify:  q.Get("allowInsecure") == "1" || strings.ToLower(q.Get("allowInsecure")) == "true",

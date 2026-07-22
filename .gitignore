@@ -33,6 +33,9 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
+# Build output
+/build/
+
 # Temporary files
 *.tmp
 *.temp

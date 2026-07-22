@@ -56,11 +56,129 @@ func TestProxyConfig_Protocol(t *testing.T) {
 	}
 }
 
-func TestProxyConfig_Addr(t *testing.T) {
-	pc := ProxyConfig{VLess: &VLessConfig{BaseConfig: BaseConfig{Server: "example.com", Port: 443}}}
-	if got := pc.Addr(); got != "example.com:443" {
-		t.Errorf("Addr() = %s, want example.com:443", got)
+func TestProxyConfig_Name(t *testing.T) {
+	tests := []struct {
+		name string
+		pc   ProxyConfig
+		want string
+	}{
+		{"SS", ProxyConfig{SS: &SSConfig{BaseConfig: BaseConfig{Name: "ss-name"}}}, "ss-name"},
+		{"VMess", ProxyConfig{VMess: &VMessConfig{BaseConfig: BaseConfig{Name: "vmess-name"}}}, "vmess-name"},
+		{"VLess", ProxyConfig{VLess: &VLessConfig{BaseConfig: BaseConfig{Name: "vless-name"}}}, "vless-name"},
+		{"Trojan", ProxyConfig{Trojan: &TrojanConfig{BaseConfig: BaseConfig{Name: "trojan-name"}}}, "trojan-name"},
+		{"Reality", ProxyConfig{Reality: &RealityConfig{BaseConfig: BaseConfig{Name: "reality-name"}}}, "reality-name"},
+		{"empty", ProxyConfig{}, ""},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.pc.Name(); got != tt.want {
+				t.Errorf("Name() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestProxyConfig_String(t *testing.T) {
+	tests := []struct {
+		name     string
+		pc       ProxyConfig
+		contains string
+	}{
+		{"SS", ProxyConfig{SS: &SSConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 8388}, Method: "aes"}}, "SS[1.2.3.4:8388"},
+		{"VMess", ProxyConfig{VMess: &VMessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}, UUID: "abc-uuid"}}, "VMess[1.2.3.4:443"},
+		{"VLess", ProxyConfig{VLess: &VLessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}, UUID: "abc-uuid"}}, "VLess[1.2.3.4:443"},
+		{"Trojan", ProxyConfig{Trojan: &TrojanConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "Trojan[1.2.3.4:443]"},
+		{"Reality", ProxyConfig{Reality: &RealityConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}, UUID: "abc-uuid"}}, "Reality[1.2.3.4:443"},
+		{"empty", ProxyConfig{}, "empty"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.pc.String()
+			if !contains(got, tt.contains) {
+				t.Errorf("String() = %q, want contains %q", got, tt.contains)
+			}
+		})
+	}
+}
+
+func TestProxyConfig_Base(t *testing.T) {
+	tests := []struct {
+		name     string
+		pc       ProxyConfig
+		wantHost string
+		wantPort int
+	}{
+		{"SS", ProxyConfig{SS: &SSConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 8388}}}, "1.2.3.4", 8388},
+		{"VMess", ProxyConfig{VMess: &VMessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4", 443},
+		{"VLess", ProxyConfig{VLess: &VLessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4", 443},
+		{"Trojan", ProxyConfig{Trojan: &TrojanConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4", 443},
+		{"Reality", ProxyConfig{Reality: &RealityConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4", 443},
+		{"empty", ProxyConfig{}, "", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			base := tt.pc.Base()
+			if base.Server != tt.wantHost || base.Port != tt.wantPort {
+				t.Errorf("Base() = %+v, want server=%q port=%d", base, tt.wantHost, tt.wantPort)
+			}
+		})
+	}
+}
+
+func TestProxyConfig_Addr(t *testing.T) {
+	tests := []struct {
+		name string
+		pc   ProxyConfig
+		want string
+	}{
+		{"SS", ProxyConfig{SS: &SSConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 8388}}}, "1.2.3.4:8388"},
+		{"VMess", ProxyConfig{VMess: &VMessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4:443"},
+		{"VLess", ProxyConfig{VLess: &VLessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4:443"},
+		{"Trojan", ProxyConfig{Trojan: &TrojanConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4:443"},
+		{"Reality", ProxyConfig{Reality: &RealityConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4:443"},
+		{"empty", ProxyConfig{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.pc.Addr(); got != tt.want {
+				t.Errorf("Addr() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPerConfigStrings(t *testing.T) {
+	// Each per-config String() method should return a non-empty string
+	cfg := SSConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 8388}, Method: "aes"}
+	if cfg.String() == "" {
+		t.Error("SSConfig.String() returned empty")
+	}
+	cfg2 := VMessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}, UUID: "abc"}
+	if cfg2.String() == "" {
+		t.Error("VMessConfig.String() returned empty")
+	}
+	cfg3 := VLessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}, UUID: "abc"}
+	if cfg3.String() == "" {
+		t.Error("VLessConfig.String() returned empty")
+	}
+	cfg4 := TrojanConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}
+	if cfg4.String() == "" {
+		t.Error("TrojanConfig.String() returned empty")
+	}
+	cfg5 := RealityConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}, UUID: "abc"}
+	if cfg5.String() == "" {
+		t.Error("RealityConfig.String() returned empty")
+	}
+}
+
+// contains is a tiny helper to avoid importing strings just for one call.
+func contains(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 func TestValidationResult(t *testing.T) {

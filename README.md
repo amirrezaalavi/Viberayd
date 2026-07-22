@@ -55,6 +55,21 @@ viberay -input configs.txt -quiet
 viberay -resume checkpoint.json
 ```
 
+## Test Data
+
+The `testdata/` directory ships with real-world fixtures and a chunked subscription
+to make incremental testing fast:
+
+- `testdata/working/proxies.txt` — 16 known-good configs
+- `testdata/not-working/proxies.txt` — 15 known-bad configs (for failure-handling tests)
+- `testdata/examples/{ss,vmess,vless,trojan,reality}.txt` — one minimal config per protocol
+- `testdata/subscriptions/chunk_000..004.txt` — 1,916-line subscription split into 5 chunks of ~400 configs each (recommended over the full 1,916-line `test.txt` for incremental work)
+
+Example:
+```bash
+viberay -input testdata/subscriptions/chunk_000.txt -depth standard -concurrency 20
+```
+
 All output formats (table, JSON, CSV, markdown) show only working configs, each as the **exact original share link** with the measured latency.
 
 Example output:

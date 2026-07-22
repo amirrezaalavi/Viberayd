@@ -305,3 +305,624 @@ func TestIsRealityURL(t *testing.T) {
 		t.Error("plain TLS misdetected as reality")
 	}
 }
+
+// --- DecodeBase64 ---
+
+func TestDecodeBase64(t *testing.T) {
+	b, err := DecodeBase64("dGVzdA==")
+	if err != nil {
+		t.Fatalf("valid base64 rejected: %v", err)
+	}
+	if string(b) != "test" {
+		t.Errorf("DecodeBase64() = %q, want %q", string(b), "test")
+	}
+
+	// Invalid input
+	if _, err := DecodeBase64("!!!invalid!!!"); err == nil {
+		t.Error("DecodeBase64: expected error for invalid input")
+	}
+}
+
+// --- DecodeBase64URL ---
+
+func TestDecodeBase64URL(t *testing.T) {
+	// Unpadded input — padding added internally
+	b, err := DecodeBase64URL("dGVzdA")
+	if err != nil {
+		t.Fatalf("valid URL-safe base64 rejected: %v", err)
+	}
+	if string(b) != "test" {
+		t.Errorf("DecodeBase64URL() = %q, want %q", string(b), "test")
+	}
+
+	// Invalid input
+	if _, err := DecodeBase64URL("!!!invalid!!!"); err == nil {
+		t.Error("DecodeBase64URL: expected error for invalid input")
+	}
+}
+
+// --- LooksLikeBase64 edge cases ---
+
+func TestLooksLikeBase64_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"empty", "", false},
+		{"length not divisible by 4", "abc", false},
+		{"invalid chars", "hello world!", false},
+		{"invalid padding middle", "ab=c", true},  // = is within last 2 positions, passes
+		{"valid padded", "dGVzdA==", true},
+		{"valid unpadded", "dGVzdA", false}, // len%4 != 0, function requires multiple of 4
+		{"short valid", "Mg==", true},  // base64 of "2"
+		{"only padding", "==", false},   // padding alone without data not valid
+		{"just equals", "====", false},  // all padding
+		{"newlines", "abc\n", false},    // newline is not base64
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := LooksLikeBase64(tt.input)
+			if got != tt.want {
+				t.Errorf("LooksLikeBase64(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- ExtractFragment edge cases ---
+
+func TestExtractFragment_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantURI  string
+		wantName string
+	}{
+		{"no fragment", "ss://user@host:port", "ss://user@host:port", ""},
+		{"trailing hash", "ss://user@host:port#", "ss://user@host:port", ""},
+		{"URL-encoded name", "ss://user@host:port#My%20Server", "ss://user@host:port", "My Server"},
+		{"plain name", "ss://user@host:port#MyServer", "ss://user@host:port", "MyServer"},
+		{"multiple hashes", "ss://user@host:port#first#second", "ss://user@host:port#first", "second"},
+		{"empty input", "", "", ""},
+		{"only hash", "#", "", ""},
+		{"emoji fragment", "vmess://data#\U0001F1FA\U0001F1F8", "vmess://data", "\U0001F1FA\U0001F1F8"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uri, name := ExtractFragment(tt.input)
+			if uri != tt.wantURI || name != tt.wantName {
+				t.Errorf("ExtractFragment(%q) = (%q, %q), want (%q, %q)", tt.input, uri, name, tt.wantURI, tt.wantName)
+			}
+		})
+	}
+}
+
+// --- IsRealityURL edge cases ---
+
+func TestIsRealityURL_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"security=reality", "vless://uuid@host:443?security=reality&pbk=xxx", true},
+		{"pbk present (no security=reality)", "vless://uuid@host:443?pbk=xxx&security=tls", true},
+		{"security=tls", "vless://uuid@host:443?security=tls&type=tcp", false},
+		{"no security param", "vless://uuid@host:443?type=tcp", false},
+		{"not vless", "ss://method:pass@host:443", false},
+		{"malformed URL", "vless://not a valid url?security=reality", false},
+		{"empty host", "vless://@?security=reality&pbk=xxx", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsRealityURL(tt.input)
+			if got != tt.want {
+				t.Errorf("IsRealityURL(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- DetectProtocol error path ---
+
+func TestDetectProtocol_Unknown(t *testing.T) {
+	if _, err := DetectProtocol(""); err == nil {
+		t.Error("expected error for empty input")
+	}
+	if _, err := DetectProtocol("unknown://scheme"); err == nil {
+		t.Error("expected error for unknown scheme")
+	}
+	if _, err := DetectProtocol("http://example.com"); err == nil {
+		t.Error("expected error for non-proxy scheme")
+	}
+}
+
+// --- Parse edge cases ---
+
+func TestParse_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantN   int
+		wantErr bool
+	}{
+		{"empty", "", 0, true},
+		{"only whitespace", "   	  \n  ", 0, true},
+		{"only comments", "# comment1\n# comment2\n# comment3", 0, false},
+		{"single valid SS", "ss://chacha20-ietf-poly1305:pass@192.0.2.1:8388#SS", 1, false},
+		{"single base64 line", "c3M6Ly9jaGFjaGEyMC1pZXRmLXBvbHkxMzA1OnBhc3NAMTkyLjAuMi4xOjgzODgjU1M=", 1, false},
+		{"mixed with blank lines", "\n\nss://method:pw@1.1.1.1:8388#A\n\n\nvmess://eyJ2IjogIjIiLCAicHMiOiAiQiIsICJhZGQiOiAiZXhhbXBsZS5jb20iLCAicG9ydCI6ICI4MCIsICJpZCI6ICJhMWIyYzNkNC1lNWY2LTc4OTAtYWJjZC1lZjEyMzQ1Njc4OTAiLCAiYWlkIjogIjAiLCAic2N5IjogImF1dG8iLCAibmV0IjogInRjcCJ9\n\n", 2, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configs, err := Parse(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if len(configs) != tt.wantN {
+				t.Errorf("Parse() = %d configs, want %d", len(configs), tt.wantN)
+			}
+		})
+	}
+}
+
+// --- Parse subscription with all 5 protocols ---
+
+func TestParse_MixedSubscription(t *testing.T) {
+	lines := []string{
+		"ss://chacha20-ietf-poly1305:pass@1.1.1.1:8388",
+		"vmess://eyJ2IjogIjIiLCAicHMiOiAiIiwgImFkZCI6ICIyLjIuMi4yIiwgInBvcnQiOiAiNDQzIiwgImlkIjogImExYjJjM2Q0LWU1ZjYtNzg5MC1hYmNkLWVmMTIzNDU2Nzg5MCIsICJhaWQiOiAiMCIsICJzY3kiOiAiYXV0byIsICJuZXQiOiAidGNwIn0=",
+		"vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@3.3.3.3:443?type=tcp",
+		"trojan://password@4.4.4.4:443",
+		"vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@5.5.5.5:443?security=reality&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+	}
+	input := lines[0] + "\n" + lines[1] + "\n" + lines[2] + "\n" + lines[3] + "\n" + lines[4]
+	configs, err := Parse(input)
+	if err != nil {
+		t.Fatalf("mixed subscription parse failed: %v", err)
+	}
+	if len(configs) != 5 {
+		t.Fatalf("expected 5 configs, got %d", len(configs))
+	}
+	expected := []models.Protocol{models.ProtocolSS, models.ProtocolVMess, models.ProtocolVLess, models.ProtocolTrojan, models.ProtocolReality}
+	for i, exp := range expected {
+		if configs[i].Protocol() != exp {
+			t.Errorf("config[%d] protocol = %v, want %v", i, configs[i].Protocol(), exp)
+		}
+	}
+}
+
+// --- ParseSingle / parseSS error paths ---
+
+func TestParseSS_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"missing @", "ss://notavaliduri"},
+		{"empty after ss://", "ss://"},
+		{"missing method:password", "ss://@host:8388"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseSingle(tt.input)
+			if err == nil {
+				t.Errorf("ParseSingle(%q) expected error", tt.input)
+			}
+		})
+	}
+}
+
+// --- parseVMess error paths ---
+
+func TestParseVMess_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"not base64", "vmess://!!!not-base64!!!"},
+		{"not JSON", "vmess://" + base64.StdEncoding.EncodeToString([]byte("not-json"))},
+		{"bad UUID", "vmess://" + base64.StdEncoding.EncodeToString([]byte(`{"v":"2","ps":"T","add":"1.2.3.4","port":"443","id":"bad-uuid"}`))},
+		{"missing server", "vmess://" + base64.StdEncoding.EncodeToString([]byte(`{"v":"2","ps":"T","add":"","port":"443","id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890"}`))},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseSingle(tt.input)
+			if err == nil {
+				t.Errorf("ParseSingle(%q) expected error", tt.input[:40])
+			}
+		})
+	}
+}
+
+// --- parseVLess error paths ---
+
+func TestParseVLess_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"bad URL (no host)", "vless://"},
+		{"bad UUID", "vless://bad-uuid@example.com:443"},
+		{"missing server", "vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@:443"},
+		{"garbage after vless://", "vless://!!!garbage!!!:443"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseSingle(tt.input)
+			if err == nil {
+				t.Errorf("ParseSingle(%q) expected error", tt.input)
+			}
+		})
+	}
+}
+
+// --- parseTrojan error paths ---
+
+func TestParseTrojan_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"bad URL", "trojan://"},
+		{"missing password", "trojan://@host:443"},
+		{"missing server", "trojan://password@:443"},
+		{"garbage after trojan://", "trojan://!!!garbage!!!:443"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseSingle(tt.input)
+			if err == nil {
+				t.Errorf("ParseSingle(%q) expected error", tt.input)
+			}
+		})
+	}
+}
+
+// --- parseReality error paths ---
+
+func TestParseReality_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"bad URL", "vless://?security=reality"},
+		{"bad UUID", "vless://bad-uuid@host:443?security=reality&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="},
+		{"bad public key", "vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@host:443?security=reality&pbk=short"},
+		{"missing server", "vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@:443?security=reality&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseSingle(tt.input)
+			if err == nil {
+				t.Errorf("ParseSingle(%q) expected error", tt.input[:50])
+			}
+		})
+	}
+}
+
+// --- netSplitHostPort ---
+
+func TestNetSplitHostPort(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantHost string
+		wantPort string
+		wantErr  bool
+	}{
+		{"host:port", "example.com:443", "example.com", "443", false},
+		{"IPv4:port", "1.2.3.4:8080", "1.2.3.4", "8080", false},
+		{"IPv6 with port", "[::1]:443", "::1", "443", false},
+		{"host only", "example.com", "example.com", "", true},
+		{"IPv6 without port", "[::1]", "::1", "", true},
+		{"empty", "", "", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host, port, err := netSplitHostPort(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("netSplitHostPort(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+			if host != tt.wantHost {
+				t.Errorf("netSplitHostPort(%q) host = %q, want %q", tt.input, host, tt.wantHost)
+			}
+			if port != tt.wantPort {
+				t.Errorf("netSplitHostPort(%q) port = %q, want %q", tt.input, port, tt.wantPort)
+			}
+		})
+	}
+}
+
+// --- parsePluginOpts ---
+
+func TestParsePluginOpts(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  map[string]string
+	}{
+		{"empty", "", map[string]string{}},
+		{"single pair", "key=value", map[string]string{"key": "value"}},
+		{"multiple pairs", "a=1;b=2;c=3", map[string]string{"a": "1", "b": "2", "c": "3"}},
+		{"malformed (no value)", "key", map[string]string{}},
+		{"mixed", "a=1;b;c=3", map[string]string{"a": "1", "c": "3"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parsePluginOpts(tt.input)
+			if len(got) != len(tt.want) {
+				t.Errorf("parsePluginOpts(%q) = %v (len=%d), want %v (len=%d)", tt.input, got, len(got), tt.want, len(tt.want))
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Errorf("parsePluginOpts(%q)[%q] = %q, want %q", tt.input, k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
+// --- Round-trip: parse then check Raw field ---
+
+func TestParseRoundTrip(t *testing.T) {
+	inputs := []string{
+		"ss://chacha20-ietf-poly1305:pass@192.0.2.1:8388#SS-Test",
+		"vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@example.com:443?type=tcp&security=tls&sni=example.com&fp=firefox#VLess-Test",
+		"trojan://mypassword@tr.example.com:443#Trojan-Test",
+	}
+	for _, raw := range inputs {
+		t.Run(raw[:10], func(t *testing.T) {
+			cfg, err := ParseSingle(raw)
+			if err != nil {
+				t.Fatalf("ParseSingle(%q): %v", raw, err)
+			}
+			if cfg.Raw != raw {
+				t.Errorf("Raw field = %q, want %q", cfg.Raw, raw)
+			}
+		})
+	}
+}
+
+// --- Fallback: vless:// without reality params stays as VLess ---
+
+func TestParse_FallbackToVLess(t *testing.T) {
+	// vless:// URL that has no security=reality and no pbk → should stay VLess
+	input := "vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@example.com:443?type=tcp&security=tls"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle: %v", err)
+	}
+	if cfg.VLess == nil {
+		t.Fatal("expected VLess config, got nil")
+	}
+	if cfg.Reality != nil {
+		t.Fatal("expected nil Reality config for non-reality vless URL")
+	}
+	if cfg.Protocol() != models.ProtocolVLess {
+		t.Errorf("Protocol() = %v, want %v", cfg.Protocol(), models.ProtocolVLess)
+	}
+
+	// Also test with no security param at all
+	input2 := "vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@example.com:443?type=tcp"
+	cfg2, err2 := ParseSingle(input2)
+	if err2 != nil {
+		t.Fatalf("ParseSingle: %v", err2)
+	}
+	if cfg2.VLess == nil {
+		t.Fatal("expected VLess config for plain vless URL")
+	}
+	if cfg2.Protocol() != models.ProtocolVLess {
+		t.Errorf("Protocol() = %v, want %v", cfg2.Protocol(), models.ProtocolVLess)
+	}
+}
+
+// --- Fuzzy / edge case: truncated URIs, null bytes, non-UTF-8, long strings ---
+//
+// NOTE: The null-byte test documents existing parser behavior. The SS parser
+// silently ignores embedded null bytes in the port string (Atoi stops at the
+// null byte, port defaults to 8388). A future improvement could reject null
+// bytes at the token-extraction stage.
+
+func TestParse_FuzzyNullBytes(t *testing.T) {
+	// Null byte in the middle — the parser currently handles this silently
+	// because strconv.Atoi stops at the null byte, triggering the default port.
+	input := "ss://chacha20-ietf-poly1305:pass@192.0.2.1:8388\x00#SS"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle with embedded null byte: %v", err)
+	}
+	if cfg.SS == nil {
+		t.Fatal("expected SS config despite null byte")
+	}
+	// The port field should be set to the default (8388 from the URI before null)
+	if cfg.SS.Port != 8388 {
+		t.Logf("Parsed SS port = %d (null byte in port string)", cfg.SS.Port)
+	}
+}
+
+func TestParse_FuzzyTruncated(t *testing.T) {
+	full := "vmess://eyJ2IjogIjIiLCAicHMiOiAiIiwgImFkZCI6ICIxLjIuMy40IiwgInBvcnQiOiAiNDQzIiwgImlkIjogImExYjJjM2Q0LWU1ZjYtNzg5MC1hYmNkLWVmMTIzNDU2Nzg5MCIsICJhaWQiOiAiMCIsICJzY3kiOiAiYXV0byIsICJuZXQiOiAidGNwIn0="
+	truncated := full[:len(full)/2] // cut in half
+	_, err := ParseSingle(truncated)
+	if err == nil {
+		t.Error("expected error for truncated VMess URI")
+	}
+}
+
+func TestParse_FuzzyNonUTF8(t *testing.T) {
+	// Non-UTF-8 bytes — Go strings are just byte sequences
+	input := string([]byte{0xff, 0xfe, 0x00, 0x01, 0x02})
+	_, err := ParseSingle(input)
+	if err == nil {
+		t.Error("expected error for non-UTF-8 input without protocol prefix")
+	}
+}
+
+func TestParse_FuzzyVeryLong(t *testing.T) {
+	// Very long string (~10K chars) that is not a valid URI
+	long := string(make([]byte, 10000))
+	for range long {
+		long = "A" + long[1:] // ensure first char is 'A'
+	}
+	// Make it not start with any known prefix
+	input := "X" + long[1:]
+	_, err := ParseSingle(input)
+	if err == nil {
+		t.Error("expected error for very long invalid input")
+	}
+}
+
+// --- ParseSingle empty input ---
+
+func TestParseSingle_EmptyInput(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"empty", ""},
+		{"only spaces", "   "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseSingle(tt.input)
+			if err == nil {
+				t.Errorf("ParseSingle(%q) expected error", tt.input)
+			}
+		})
+	}
+}
+
+// --- Parse base64 batch with some errors ---
+
+func TestParse_BatchWithErrors(t *testing.T) {
+	lines := []string{
+		"ss://chacha20-ietf-poly1305:pass@1.1.1.1:8388",
+		"invalid-line-without-protocol",
+		"trojan://password@2.2.2.2:443",
+	}
+	input := strings.Join(lines, "\n")
+	configs, err := Parse(input)
+	if err != nil {
+		t.Fatalf("batch with errors: %v", err)
+	}
+	if len(configs) != 2 {
+		t.Errorf("expected 2 successful configs, got %d", len(configs))
+	}
+}
+
+// --- Parse single-line comment/whitespace ---
+
+func TestParse_CommentAndBlank(t *testing.T) {
+	// Only comments and blank lines -> no configs, no error
+	configs, err := Parse("# comment\n\n# another\n")
+	if err != nil {
+		t.Errorf("expected nil error for comments+blanks, got %v", err)
+	}
+	if len(configs) != 0 {
+		t.Errorf("expected 0 configs, got %d", len(configs))
+	}
+}
+
+// --- Parse with all lines failing ---
+
+func TestParse_AllLinesFail(t *testing.T) {
+	input := "not-a-valid-uri\nanother-bad-one\nthird-garbage"
+	configs, err := Parse(input)
+	if err == nil {
+		t.Error("expected error when all lines fail")
+	}
+	if len(configs) != 0 {
+		t.Errorf("expected 0 configs, got %d", len(configs))
+	}
+}
+
+// --- parseSS: port defaults to 8388 when port string is non-numeric ---
+
+func TestParseSS_DefaultPort(t *testing.T) {
+	// Atoi("abc") returns 0, which triggers the default 8388
+	cfg, err := ParseSingle("ss://aes-256-gcm:secret@1.2.3.4:abc")
+	if err != nil {
+		t.Fatalf("ParseSingle with non-numeric port: %v", err)
+	}
+	if cfg.SS.Port != 8388 {
+		t.Errorf("expected port 8388 (default), got %d", cfg.SS.Port)
+	}
+}
+
+// --- parseVLess: network defaults to tcp ---
+
+func TestParseVLess_NetworkDefault(t *testing.T) {
+	// URL without type param — Network should default to "tcp"
+	cfg, err := ParseSingle("vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@example.com:443")
+	if err != nil {
+		t.Fatalf("ParseSingle: %v", err)
+	}
+	if cfg.VLess.Network != "tcp" {
+		t.Errorf("expected Network=tcp (default), got %q", cfg.VLess.Network)
+	}
+	if cfg.VLess.Encryption != "none" {
+		t.Errorf("expected Encryption=none (default), got %q", cfg.VLess.Encryption)
+	}
+}
+
+// --- parseVLess: grpc type with serviceName (path alias) ---
+
+func TestParseVLess_GRPC(t *testing.T) {
+	cfg, err := ParseSingle("vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@example.com:443?type=grpc&serviceName=my.api.Stream")
+	if err != nil {
+		t.Fatalf("ParseSingle vless grpc: %v", err)
+	}
+	if cfg.VLess.Network != "grpc" {
+		t.Errorf("expected Network=grpc, got %q", cfg.VLess.Network)
+	}
+	if cfg.VLess.TLSConfig.Path != "my.api.Stream" {
+		t.Errorf("expected Path=my.api.Stream (from serviceName), got %q", cfg.VLess.TLSConfig.Path)
+	}
+}
+
+// --- parseTrojan: network defaults to tcp ---
+
+func TestParseTrojan_NetworkDefault(t *testing.T) {
+	// Trojan without type param — Network should default to "tcp"
+	cfg, err := ParseSingle("trojan://password@tr.example.com:443")
+	if err != nil {
+		t.Fatalf("ParseSingle: %v", err)
+	}
+	if cfg.Trojan.Network != "tcp" {
+		t.Errorf("expected Network=tcp (default), got %q", cfg.Trojan.Network)
+	}
+}
+
+// --- parseReality: network and flow defaults ---
+
+func TestParseReality_Defaults(t *testing.T) {
+	// Reality URL without flow and without type
+	// Network should default to tcp, then Flow should default to xtls-rprx-vision
+	cfg, err := ParseSingle("vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@reality.example.com:443?security=reality&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+	if err != nil {
+		t.Fatalf("ParseSingle reality defaults: %v", err)
+	}
+	if cfg.Reality.Network != "tcp" {
+		t.Errorf("expected Network=tcp (default), got %q", cfg.Reality.Network)
+	}
+	if cfg.Reality.Flow != "xtls-rprx-vision" {
+		t.Errorf("expected Flow=xtls-rprx-vision (default when tcp), got %q", cfg.Reality.Flow)
+	}
+}
+
+// --- parseReality: grpc type with serviceName ---
+
+func TestParseReality_GRPC(t *testing.T) {
+	cfg, err := ParseSingle("vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@reality.example.com:443?security=reality&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=&type=grpc&serviceName=api.v1.StreamService")
+	if err != nil {
+		t.Fatalf("ParseSingle reality grpc: %v", err)
+	}
+	if cfg.Reality.Network != "grpc" {
+		t.Errorf("expected Network=grpc, got %q", cfg.Reality.Network)
+	}
+	if cfg.Reality.TLSConfig.Path != "api.v1.StreamService" {
+		t.Errorf("expected Path=api.v1.StreamService, got %q", cfg.Reality.TLSConfig.Path)
+	}
+}

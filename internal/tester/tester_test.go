@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 func TestTestTCP(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // Export writes categorized config files and error logs to baseDir.

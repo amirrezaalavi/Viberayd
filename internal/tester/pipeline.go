@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // Pipeline runs the testing stages for a single config according to the chosen depth.

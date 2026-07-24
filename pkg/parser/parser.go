@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/amiralavi/viberay/internal/errors"
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/errors"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // Parse accepts a raw string that may contain:
@@ -22,13 +22,21 @@ func Parse(input string) ([]models.ProxyConfig, error) {
 		return nil, errors.ErrInvalidFormat
 	}
 
-	// If the entire payload is base64, decode it first.
-	if LooksLikeBase64(input) {
-		decoded, err := base64.StdEncoding.DecodeString(input)
+	// If the entire payload is base64-encoded, decode it first.
+	// Uses the colon-absence heuristic: base64 never contains "://",
+	// proxy URIs always do. Also strips whitespace before decoding
+	// since wrapped subscriptions commonly insert line breaks.
+	if IsBase64Encoded(input) {
+		// Strip all whitespace before decoding (newlines, spaces, tabs
+		// are common in line-wrapped base64 subscription payloads)
+		cleaned := strings.NewReplacer("\n", "", "\r", "", " ", "", "	", "").Replace(input)
+		decoded, err := base64.StdEncoding.DecodeString(cleaned)
 		if err == nil {
 			input = string(decoded)
 		}
-		// If decoding fails, continue with raw input (it might just look like base64)
+		// If decoding fails, fall through — input might be a raw single URI
+		// that happened to pass the base64-likeness check (rare but possible
+		// with short strings that look like base64 by coincidence).
 	}
 
 	// Split into lines and parse each.

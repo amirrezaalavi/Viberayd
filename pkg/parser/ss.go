@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/amiralavi/viberay/internal/errors"
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/errors"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // parseSS handles ss:// URIs.

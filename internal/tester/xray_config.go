@@ -3,7 +3,7 @@ package tester
 import (
 	"fmt"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // buildXrayConfig generates a minimal xray-core JSON config that exposes a

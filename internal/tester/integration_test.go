@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // --- Test helpers ---

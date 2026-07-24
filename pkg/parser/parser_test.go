@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // --- Detector ---
@@ -341,32 +341,106 @@ func TestDecodeBase64URL(t *testing.T) {
 	}
 }
 
-// --- LooksLikeBase64 edge cases ---
+// --- IsBase64Encoded (the new, smarter detector) ---
 
-func TestLooksLikeBase64_EdgeCases(t *testing.T) {
+func TestIsBase64Encoded(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
 		want  bool
 	}{
+		// Empty / trivially not base64
 		{"empty", "", false},
-		{"length not divisible by 4", "abc", false},
-		{"invalid chars", "hello world!", false},
-		{"invalid padding middle", "ab=c", true},  // = is within last 2 positions, passes
-		{"valid padded", "dGVzdA==", true},
-		{"valid unpadded", "dGVzdA", false}, // len%4 != 0, function requires multiple of 4
-		{"short valid", "Mg==", true},  // base64 of "2"
-		{"only padding", "==", false},   // padding alone without data not valid
-		{"just equals", "====", false},  // all padding
-		{"newlines", "abc\n", false},    // newline is not base64
+		{"invalid pipe", "abc|def", false},
+
+		// Contains "://" — definitely a proxy URI or URL, NOT base64
+		{"vmess URI", "vmess://eyJ2IjoiMiJ9", false},
+		{"vless URI", "vless://uuid@host:443?type=tcp", false},
+		{"ss URI", "ss://YWVzLTI1Ni1nY206cGFzcw==@host:8388", false},
+		{"trojan URI", "trojan://password@host:443", false},
+		{"http URL", "http://example.com", false},
+
+		// Plain base64 (no whitespace)
+		{"plain padded", "dGVzdA==", true},
+		{"plain unpadded short", "dGVzdA", true},  // still detected; decode will be attempted then fall through
+
+		// Base64 with newlines (wrapped subscription — the main use case)
+		{"with single newline", "dm1lc3M6Ly9leUoy\nSWpvaU1pSjk=\n", true},
+		{"with carriage return + newline", "dm1lc3M6Ly9leUoy\r\nSWpvaU1pSjk=\r\n", true},
+
+		// Base64 with other whitespace
+		{"with trailing newline", "dGVzdA==\n", true},       // LooksLikeBase64 rejects this
+		{"with spaces in middle", "dGV z dA==", true},       // spaces aren't base64 but IsBase64Encoded allows them
+		{"with tabs", "dGVz	dA==", true},
+
+		// Contains non-base64, non-whitespace characters (but no ://)
+		{"invalid chars", "hello world!", false},   // '!' and space in middle? space ok, but '!' is not
+		{"pipe char", "abc|def", false},
+		{"colon inside (not ://)", "abc:def", false}, // colon is not base64, and no :// either
+
+		// Multi-line plain text with :// — should NOT be treated as base64
+		{"mixed URIs newline separated",
+			"vmess://abc\ntrojan://def\nvless://ghi\n",
+			false}, // has :// so not base64
+
+		// Edge: very long random base64-like string (simulates real subscription)
+		{"long b64", "dm1lc3M6Ly9leUoySWpvaU1pSjk9ZXlKMklqb2lNaUo5ZXlKMklqb2lNaUo5\nZXlKMklqb2lNaUo5ZXlKMklqb2lNaUo5", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := LooksLikeBase64(tt.input)
+			got := IsBase64Encoded(tt.input)
 			if got != tt.want {
-				t.Errorf("LooksLikeBase64(%q) = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("IsBase64Encoded(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestParse_DecodesBase64Subscription verifies that Parse correctly decodes
+// a wrapped (newline-containing) base64 subscription body.
+func TestParse_DecodesBase64Subscription(t *testing.T) {
+	// Three proxy URIs joined by newline, then base64-encoded, then
+	// artificially wrapped at column ~50 to simulate a real subscription payload.
+	plain := "ss://chacha20-ietf-poly1305:pass@1.2.3.4:8388#A\ntrojan://pw@2.3.4.5:443#B\nvless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@3.4.5.6:443#C\n"
+	b64 := base64.StdEncoding.EncodeToString([]byte(plain))
+	// Insert newlines to simulate line-wrapped subscription
+	var wrapped strings.Builder
+	for i, r := range b64 {
+		if i > 0 && i%50 == 0 {
+			wrapped.WriteByte('\n')
+		}
+		wrapped.WriteRune(r)
+	}
+	wrapped.WriteByte('\n')
+
+	configs, err := Parse(wrapped.String())
+	if err != nil {
+		t.Fatalf("Parse(wrapped b64) returned error: %v", err)
+	}
+	if len(configs) != 3 {
+		t.Fatalf("Parse(wrapped b64) returned %d configs, want 3", len(configs))
+	}
+	if configs[0].Protocol() != models.ProtocolSS {
+		t.Errorf("first should be SS, got %v", configs[0].Protocol())
+	}
+	if configs[1].Protocol() != models.ProtocolTrojan {
+		t.Errorf("second should be Trojan, got %v", configs[1].Protocol())
+	}
+	if configs[2].Protocol() != models.ProtocolVLess {
+		t.Errorf("third should be VLess, got %v", configs[2].Protocol())
+	}
+}
+
+// TestParse_PlainTextSubscription verifies that Parse handles multi-line
+// plain text with :// URIs — it should NOT try to base64-decode those.
+func TestParse_PlainTextSubscription(t *testing.T) {
+	input := "ss://YWVzLTI1Ni1nY206cGFzcw==@host:8388#test1\nvmess://eyJ2IjoiMiIsImFkZCI6Imhvc3QiLCJwb3J0IjoiNDQzIiwiaWQiOiJhMGIxYzJkMy1lNGY2LTc4OTAtYWJjZC1lZjEyMzQ1Njc4OTAiLCJhaWQiOiIwIn0=#test2\n"
+	configs, err := Parse(input)
+	if err != nil {
+		t.Fatalf("Parse(plain text) returned error: %v", err)
+	}
+	if len(configs) != 2 {
+		t.Errorf("Parse(plain text) returned %d configs, want 2", len(configs))
 	}
 }
 

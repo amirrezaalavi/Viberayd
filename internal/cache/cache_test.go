@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 func TestDNSCache_Lookup(t *testing.T) {

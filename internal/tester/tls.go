@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // TLSResult holds the outcome of a TLS handshake test.

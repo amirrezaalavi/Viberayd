@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // --- ValidatePort (string) ---

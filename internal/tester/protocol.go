@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // ProtocolResult holds the outcome of a protocol-specific handshake test.

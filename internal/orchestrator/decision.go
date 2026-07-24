@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // UserPreferences captures CLI overrides. Zero-values mean "auto / not set".

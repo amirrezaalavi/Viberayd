@@ -5,8 +5,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/amiralavi/viberay/internal/errors"
-	"github.com/amiralavi/viberay/internal/models"
+	"github.com/amirrezaalavi/Viberay/internal/errors"
+	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 // DetectProtocol identifies the proxy protocol from a URI prefix.
@@ -40,7 +40,39 @@ func ExtractFragment(raw string) (uri, name string) {
 	return raw, ""
 }
 
+// IsBase64Encoded reports whether s looks like a base64-encoded payload rather
+// than raw proxy URIs. The heuristic: proxy URIs always contain "://" (e.g.
+// vmess://, ss://), while base64 does not include the colon character at all.
+// We also allow whitespace (newlines, spaces, tabs) since wrapped subscription
+// files commonly insert line breaks.
+func IsBase64Encoded(s string) bool {
+	if s == "" {
+		return false
+	}
+	// Fast-fail: if it contains "://" it's definitely a proxy URI or URL — not base64.
+	// Base64 alphabet is A-Z, a-z, 0-9, +, /, and = for padding — it never has colon.
+	if strings.Contains(s, "://") {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case c >= 'A' && c <= 'Z':
+		case c >= 'a' && c <= 'z':
+		case c >= '0' && c <= '9':
+		case c == '+' || c == '/':
+		case c == '=':
+		case c == '\n' || c == '\r' || c == ' ' || c == '	':
+			// Whitespace is common in line-wrapped base64 subscription payloads
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // LooksLikeBase64 reports whether s appears to be base64-encoded.
+// Deprecated: Use IsBase64Encoded instead, which handles whitespace and uses
+// the colon-absence heuristic for better accuracy.
 func LooksLikeBase64(s string) bool {
 	if len(s) == 0 || len(s)%4 != 0 {
 		return false

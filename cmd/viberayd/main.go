@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/amirrezaalavi/Viberay/internal/daemon"
 )
@@ -49,16 +47,8 @@ func main() {
 
 	d := daemon.NewDaemon(&cfg)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := daemon.SignalContext(context.Background())
 	defer cancel()
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigCh
-		slog.Info("received signal, shutting down", "signal", sig)
-		cancel()
-	}()
 
 	if *singleCycle {
 		if err := d.RunCycle(ctx); err != nil {

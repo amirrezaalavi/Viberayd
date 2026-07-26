@@ -94,6 +94,10 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 
 	timeout := d.Config.Daemon.Timeout()
 	for _, url := range urls {
+		if ctx.Err() != nil {
+			slog.Info("cycle cancelled during fetch")
+			return nil
+		}
 		fetched, err := FetchAndParse([]string{url}, timeout)
 		if err != nil {
 			slog.Warn("fetch+parse failed", "url", url, "error", err)
@@ -126,6 +130,11 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 		return nil
 	}
 
+	if ctx.Err() != nil {
+		slog.Info("cycle cancelled before tcp ping")
+		return nil
+	}
+
 	tcpTimeout := timeout
 	if tcpTimeout > 5*time.Second {
 		tcpTimeout = 5 * time.Second
@@ -148,6 +157,13 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 		}
 	}
 
+	if ctx.Err() != nil {
+		slog.Info("cycle cancelled before xray test")
+		d.writeOutputFile()
+		SaveState(d.Config.Daemon.StateFile, d.State)
+		return nil
+	}
+
 	var xrayResults []TestResult
 	if len(survivors) > 0 {
 		xrayResults = XrayTest(ctx, survivors, XrayTestConfig{
@@ -161,7 +177,18 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 
 	ApplyResults(d.State, xrayResults, now)
 	d.writeOutputFile()
-	SaveState(d.Config.Daemon.StateFile, d.State)
+
+	saveCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- SaveState(d.Config.Daemon.StateFile, d.State)
+	}()
+	select {
+	case <-done:
+	case <-saveCtx.Done():
+		slog.Warn("save state timed out")
+	}
 
 	elapsed := time.Since(start)
 	slog.Info("cycle complete",
@@ -213,7 +240,17 @@ func (d *Daemon) shutdown() error {
 		d.StopHTTPServers(ctx)
 	}
 	d.writeOutputFile()
-	SaveState(d.Config.Daemon.StateFile, d.State)
+	saveCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- SaveState(d.Config.Daemon.StateFile, d.State)
+	}()
+	select {
+	case <-done:
+	case <-saveCtx.Done():
+		slog.Warn("save state timed out during shutdown")
+	}
 	return nil
 }
 

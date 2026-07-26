@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/amirrezaalavi/Viberay/internal/models"
@@ -14,7 +15,10 @@ import (
 type Daemon struct {
 	Config  *Config
 	State   *State
+	StateMu sync.RWMutex
 	configs map[string]models.ProxyConfig
+	trigger chan struct{}
+	http    *httpServer
 }
 
 func NewDaemon(cfg *Config) *Daemon {
@@ -27,6 +31,14 @@ func NewDaemon(cfg *Config) *Daemon {
 		Config:  cfg,
 		State:   state,
 		configs: make(map[string]models.ProxyConfig),
+		trigger: make(chan struct{}, 1),
+	}
+}
+
+func (d *Daemon) Trigger() {
+	select {
+	case d.trigger <- struct{}{}:
+	default:
 	}
 }
 
@@ -36,6 +48,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 		"parallel", d.Config.Daemon.Parallel,
 		"depth", d.Config.Daemon.Depth,
 	)
+
+	if d.Config.HTTP.Enabled {
+		if err := d.StartHTTPServers(); err != nil {
+			return fmt.Errorf("start http: %w", err)
+		}
+	}
 
 	for {
 		select {
@@ -51,6 +69,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return d.shutdown()
+		case <-d.trigger:
 		case <-time.After(d.Config.Daemon.CycleSleep()):
 		}
 	}
@@ -188,6 +207,11 @@ func (d *Daemon) writeOutputFile() {
 
 func (d *Daemon) shutdown() error {
 	slog.Info("shutting down")
+	if d.Config.HTTP.Enabled {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		d.StopHTTPServers(ctx)
+	}
 	d.writeOutputFile()
 	SaveState(d.Config.Daemon.StateFile, d.State)
 	return nil

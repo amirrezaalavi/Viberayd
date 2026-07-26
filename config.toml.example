@@ -1,0 +1,18 @@
+version = 1
+
+[daemon]
+urls_file = "urls.txt"         # subscription URLs, one per line
+output_file = "working.txt"    # working sharelinks (overwritten each cycle)
+state_file = "state.json"      # persisted config state across cycles
+cycle_sleep = 300              # seconds between test cycles (min 10)
+parallel = 10                  # concurrent xray tests (1-20, clamped)
+timeout = 10                   # per-test timeout in seconds
+depth = "standard"             # quick | standard | full | comprehensive
+keep_successful = true         # re-test working configs from previous cycle
+retest_interval = 1800         # min seconds before re-testing a working config
+
+[http]
+enabled = false                # enable HTTP servers
+port = 8080                    # subscription endpoint port
+sub_path = "/sub"              # GET /sub returns base64 of working.txt
+api_port = 8081                # management API port

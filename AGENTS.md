@@ -1,164 +1,149 @@
-# VibeRay — Agent Guide
+# Viberay — Agent Guide
 
-> **Purpose:** Help AI agents (and humans) navigate the codebase quickly.
-
----
-
-## Project Overview
-
-VibeRay is an AI-driven Xray/V2Ray proxy configuration testing system written in Go.
-It parses proxy URIs (SS, VMess, VLESS, Trojan, Reality), validates them, runs
-connectivity tests (TCP → TLS → Protocol → Xray proxy), and generates reports.
+> **Purpose:** Let agents find the exact files and patterns they need without reading everything.
 
 ---
 
-## Directory Structure
+## Entry Points
+
+| If you need to... | Start here |
+|---|---|
+| Fix a bug or add a feature to the daemon | `internal/daemon/` — see [Daemon Packages] below |
+| Change how configs are tested (TCP/TLS/Xray) | `internal/tester/` |
+| Add a new proxy protocol parser | `pkg/parser/` + `internal/models/` |
+| Change the HTTP API | `internal/daemon/http.go` |
+| Understand the state machine | `internal/daemon/state.go` — `ApplyResults` |
+| Modify config or validate user input | `internal/daemon/config.go` |
+
+---
+
+## Directory Map
 
 ```
-viberay/
-├── cmd/viberay/              # CLI entry point
-│   └── main.go               # flag parsing, signal handling, wires everything
-├── internal/
-│   ├── models/               # Data models (ALL domain types)
-│   │   ├── config.go         # ProxyConfig tagged-union + per-protocol structs + Raw field
-│   │   ├── result.go         # TestResult, Summary, ValidationResult
-│   │   ├── context.go        # TestContext, TestDepth, OutputStyle, OrchestratorDecision
-│   │   └── models_test.go
-│   ├── errors/               # Sentinel errors + categorization + recovery strategies
-│   │   ├── errors.go         # ErrInvalidProtocol, ErrTCPConnect, CategorizedError, etc.
-│   │   ├── recovery.go       # RecoveryAction, Recommend(), StrategyFor()
-│   │   └── recovery_test.go
-│   ├── logging/              # Structured logging setup
-│   │   └── logger.go         # slog initialization
-│   ├── orchestrator/         # AI heuristic decision layer (Phase 5)
-│   │   ├── decision.go       # Decide(), BuildContext(), UserPreferences
-│   │   └── decision_test.go
-│   ├── output/               # Output generator + checkpointing (Phase 6/7)
-│   │   ├── formatter.go      # Formatter interface + New()
-│   │   ├── json.go           # JSONFormatter — outputs working configs as raw URI + latency
-│   │   ├── csv.go            # CSVFormatter — outputs working configs as raw URI + latency
-│   │   ├── table.go          # TableFormatter — outputs working configs as raw URI + latency
-│   │   ├── markdown.go       # MarkdownFormatter — outputs working configs as raw URI + latency
-│   │   ├── exporter.go       # Categorized file export (valid/failed/reality/legacy)
-│   │   ├── checkpoint.go     # SaveCheckpoint, LoadCheckpoint, RemoveCheckpoint
-│   │   ├── checkpoint_test.go
-│   │   └── output_test.go
-│   ├── tester/               # Testing engine (Phase 3/7)
-│   │   ├── tcp.go            # TCP connectivity tests
-│   │   ├── tls.go            # TLS handshake tests + fingerprinting
-│   │   ├── protocol.go       # Protocol-specific probes
-│   │   ├── xray.go           # Xray process runner + SOCKS5 probe
-│   │   ├── xray_config.go    # Xray JSON config generation (all 5 protocols)
-│   │   ├── pipeline.go       # Pipeline.Run with depth-gated stages
-│   │   ├── resilience.go     # ResilientRunner with retry/backoff/load reduction
-│   │   ├── resilience_test.go
-│   │   └── tester_test.go
-│   ├── concurrency/          # Resource management (Phase 4)
-│   │   ├── port.go           # PortManager + StaggeredAllocator
-│   │   ├── pool.go           # Bounded worker Pool
-│   │   ├── xray_pool.go      # Reusable XrayInstance pool
-│   │   └── concurrency_test.go
-│   └── cache/                # Caching layer (Phase 4)
-│       ├── dns.go            # DNS LRU cache (TTL-based)
-│       ├── result.go         # TestResult cache for duplicate servers
-│       └── cache_test.go
-├── pkg/parser/               # Parser engine (Phase 2)
-│   ├── parser.go             # Unified Parse() + ParseSingle() entry points (sets Raw field)
-│   ├── detector.go           # Protocol detection, base64 helpers, fragment extraction
-│   ├── validator.go          # UUID, port, public key, flow, network validators
-│   ├── ss.go                 # Shadowsocks parser (SIP002 + legacy base64)
-│   ├── vmess.go              # VMess parser (base64 JSON)
-│   ├── vless.go              # VLESS parser (URL params)
-│   ├── trojan.go             # Trojan parser
-│   ├── reality.go            # Reality parser + IsRealityURL detector
-│   └── parser_test.go
-├── pkg/fetcher/              # Remote subscription fetcher (Phase 8)
-│   ├── fetcher.go            # HTTP fetch for subscription URLs
-│   └── fetcher_test.go
-├── configs/                  # Runtime / example configs (empty, for future use)
-├── testdata/                 # Test fixtures (empty, for future use)
-├── go.mod                    # module github.com/amiralavi/viberay
-├── Makefile                  # build, test, coverage, cross-compile
-├── .gitignore
-├── TODO.md                   # Full 10-phase roadmap with checkboxes
-└── AGENTS.md                 # This file
+cmd/
+  viberayd/main.go          # daemon entry point: -config, -once, SignalContext
+internal/
+  daemon/                    # daemon: config, state, fetcher, tester, loop, http, signals
+    config.go                # Config struct, LoadConfig, DefaultConfig, validation
+    state.go                 # State, ConfigEntry, Load/Save, SelectCandidates, ApplyResults
+    fetcher.go               # LoadURLs, FetchAndParse, MergeIntoState
+    tester.go                # TCPPing (parallel TCP dial), XrayTest (bounded xray pool)
+    loop.go                  # Daemon struct, Run (infinite loop), RunCycle, shutdown
+    http.go                  # GET /sub (base64 subscription), management API
+    signals.go               # SignalContext — SIGINT/SIGTERM → context cancel
+  models/                    # domain types: ProxyConfig, TestResult, TestDepth, etc.
+  tester/                    # testing pipeline: TCP → TLS → Protocol → Xray
+  concurrency/               # Pool, PortManager, XrayPool
+  cache/                     # DNS + result LRU caches
+  errors/                    # sentinel errors, categorization, recovery strategies
+  output/                    # formatters (table, json, csv, markdown)
+  logging/                   # slog initialization
+  orchestrator/              # Decide() heuristic — depth, concurrency, timeout
+pkg/
+  parser/                    # Parse, ParseSingle, per-protocol parsers
+  fetcher/                   # HTTP fetch for subscription URLs
 ```
 
 ---
 
-## Key Architectural Decisions
+## Daemon Packages (`internal/daemon/`)
 
-1. **Tagged-union for configs.** `models.ProxyConfig` has 5 pointer fields (`SS`, `VMess`, `VLess`, `Trojan`, `Reality`). Only one is non-nil at a time. Accessor methods (`Protocol()`, `Addr()`, `Name()`, `String()`) handle dispatch. It also stores the original input URI in the `Raw` field.
+### Data Flow (one cycle)
 
-2. **Parser → Tester → Output pipeline.** Data flows in one direction:
-   ```
-   raw input → parser.Parse() → []ProxyConfig
-   → tester.Pipeline.Run() → []TestResult
-   → output generator → files / stdout
-   ```
+```
+LoadURLs(urls.txt)
+  → FetchAndParse (HTTP GET per URL → parser.Parse → dedup by sha256)
+  → MergeIntoState (new configs → state.json, state="unknown")
+  → SelectCandidates (unknown + failed + unreachable + working due for retest)
+  → TCPPing (parallel TCP connect, fast semaphore=200)
+     → unreachable → state="unreachable", skip
+  → XrayTest (Pipeline.Run bounded by `parallel` 1-20)
+     → success → state="working", write to output file
+     → failure → state="failed"
+  → SaveState (atomic tmp+rename)
+  → Sleep cycle_sleep (or until signal / trigger)
+```
 
-3. **Output is raw URIs.** All formatters (table, JSON, CSV, markdown) output only working configs, each as the original input URI with latency appended. No reconstruction, no data loss.
+### State Machine
 
-4. **Depth-gated testing.** `models.TestDepth` controls how far the pipeline goes:
-   - `quick` = TCP only
-   - `standard` = TCP + TLS
-   - `full` = TCP + TLS + Protocol handshake
-   - `comprehensive` = full + Xray proxy test
+Each config entry in state.json cycles through:
 
-5. **Validation is separate from parsing.** Parsers extract fields; `validator.go` checks format constraints. Parsers call validators inline so a malformed URI fails fast.
+```
+unknown → (tcping fail) → unreachable
+unknown → (xray fail)   → failed
+unknown → (xray pass)   → working
+working → (retest pass) → working, updated latency
+working → (retest fail) → failed
+working → (retest unreachable) → unreachable
+failed  → (next cycle)  → working | failed | unreachable
+```
 
-6. **No external dependencies (yet).** Everything uses the Go standard library. If you need SOCKS5, YAML, or progress bars, check `TODO.md` "Dependencies (to evaluate)" first.
+### Key Functions
+
+| Function | File | What it does |
+|---|---|---|
+| `LoadConfig(path)` | `config.go` | Parse TOML, apply defaults, clamp parallel 1-20 |
+| `NewState()` | `state.go` | Empty state with version=1 |
+| `LoadState(path)` | `state.go` | Read state.json, return empty if missing |
+| `SaveState(path, s)` | `state.go` | Atomic write (tmp + rename) |
+| `SelectCandidates(s, interval, keep, now)` | `state.go` | Filter configs due for testing |
+| `ApplyResults(s, results, now)` | `state.go` | Update states based on test outcomes |
+| `LoadURLs(path)` | `fetcher.go` | Read URLs file, skip comments/blanks |
+| `FetchAndParse(urls, timeout)` | `fetcher.go` | Fetch subscriptions → parse → dedup |
+| `MergeIntoState(s, configs, source)` | `fetcher.go` | Add new configs, preserve existing |
+| `TCPPing(ctx, candidates, timeout)` | `tester.go` | Parallel TCP dial, semaphore=200 |
+| `XrayTest(ctx, configs, cfg)` | `tester.go` | Bounded Pipeline.Run, PortManager |
+| `Daemon.Run(ctx)` | `loop.go` | Infinite cycle loop, starts HTTP if enabled |
+| `Daemon.RunCycle(ctx)` | `loop.go` | Single cycle (used by -once) |
+| `Daemon.Trigger()` | `loop.go` | Interrupt sleep, start next cycle |
+| `SignalContext(ctx)` | `signals.go` | Context cancelled by SIGINT/SIGTERM |
 
 ---
 
 ## Conventions
 
-- **Error handling:** Use sentinel errors from `internal/errors`. Wrap with `fmt.Errorf("%w: ...", err)` for context.
-- **Logging:** Use `log/slog` (already initialized in `main.go`). Avoid `log.Println`.
-- **Tests:** Table-driven tests preferred. Network tests must respect `testing.Short()`.
-- **Models:** All structs have `json:` and `yaml:` tags for future serialization.
+- **Error wrapping:** Use `fmt.Errorf("context: %w", err)` — never `errors.New` inside the daemon package.
+- **Logging:** `slog.Info`/`Warn`/`Error` with key-value pairs. Never `log.Println`.
+- **Config validation:** Clamp out-of-range values with a warning, never fail hard on `parallel=100` (clamp to 20).
+- **State files:** Atomic writes only (tmp + rename). Partial writes corrupt state.
+- **Concurrency:** Use channels not `sync.Mutex` for goroutine communication where possible. Mutex is OK for map writes.
 
 ---
 
-## How to Add a New Protocol
+## Adding a New HTTP Endpoint
 
-1. Add `ProtocolXXX` constant in `internal/models/config.go`
-2. Add `XXXConfig` struct in `internal/models/config.go`
-3. Add pointer field to `models.ProxyConfig` + update accessor methods
-4. Add parser in `pkg/parser/xxx.go` + wire into `ParseSingle()` (make sure to set `Raw` on the returned `ProxyConfig`)
-5. Add validator rules in `pkg/parser/validator.go` if needed
-6. Add protocol probe in `internal/tester/protocol.go`
-7. Add xray outbound builder in `internal/tester/xray_config.go`
-8. Update `ConfigPriority()` in `internal/tester/pipeline.go`
-9. Add tests in `pkg/parser/parser_test.go` and `internal/tester/tester_test.go`
+1. Add handler method on `httpServer` in `http.go`
+2. Register it in `StartHTTPServers()` with `apiMux.HandleFunc`
+3. Add test in `http_test.go` with `httptest.NewRecorder`
+4. If it accesses state, use `StateMu.RLock()`/`RUnlock()`
 
----
+## Changing the Config File Format
 
-## Phases Completed / Remaining
-
-See `TODO.md` for the full checklist. As of this writing:
-- ✅ Phase 0 — Scaffolding
-- ✅ Phase 1 — Data Models
-- ✅ Phase 2 — Parser Engine
-- ✅ Phase 3 — Testing Engine
-- ✅ Phase 4 — Concurrency & Resources
-- ✅ Phase 5 — AI Orchestrator (heuristic decision layer)
-- ✅ Phase 6 — Output Generator
-- ✅ Phase 7 — Error Handling & Resilience
-- ✅ Phase 8 — CLI Interface
-- ⬜ Phase 9 — Testing & Quality
-- ⬜ Phase 10 — Polish & Ship
+1. Update `Config`/`DaemonConfig`/`HTTPConfig` structs in `config.go`
+2. Update `DefaultConfig()` defaults
+3. Update `applyDefaults()` and `validate()` if needed
+4. Update `config.toml.example`
+5. Update tests in `config_test.go`
 
 ---
 
-## Gotchas
+## Daemon config reference
 
-- `ProxyConfig` uses value receivers on accessor methods — don't take its address expecting mutation.
-- `ProxyConfig.Raw` stores the original input URI exactly as received. All formatters use this field for output, so the output is guaranteed to match the input for working configs.
-- `xray_pool.go` `WriteXrayConfig` uses `os.CreateTemp` with `workDir`. If `workDir` is empty, it writes to the system temp dir.
-- The `Pool.Submit` select can race between semaphore send and `ctx.Done()`. Workers should always check `ctx.Err()` before doing real work.
-- `testViaSOCKS5` in `xray.go` only does a SOCKS5 greeting, not a full CONNECT + HTTP request. This is intentional to avoid importing `golang.org/x/net/proxy`.
-- `orchestrator.Decide()` is intentionally minimal — a single function, not a subsystem. All CLI flags override heuristics.
-- `ResilientRunner` in `resilience.go` caps backoff at 30s (`if wait > 30*time.Second`). This prevents runaway waits on repeated failures.
-- Checkpoint files are written on `SIGINT`/`SIGTERM` only if there are remaining unprocessed configs. The file contains both completed results and the remaining configs list, so a future run could theoretically resume (resume logic not yet implemented).
-- Xray crash auto-restart is deferred because the current `XrayRunner` starts a fresh process per config test anyway. Pool reuse of xray processes (`xray_pool.go`) would be the right place to add restart logic when Phase 4 pooling is more heavily used.
+```toml
+version = 1
+[daemon]
+urls_file = "urls.txt"         # one subscription URL per line
+output_file = "working.txt"    # overwritten each cycle: <raw-uri> <latency-ms>
+state_file = "state.json"      # persisted config state
+cycle_sleep = 300              # seconds between cycles (min 10, default 300)
+parallel = 10                  # concurrent xray tests (1-20, default 10)
+timeout = 10                   # per-test timeout in seconds (min 1, default 10)
+depth = "standard"             # quick | standard | full | comprehensive
+keep_successful = true         # re-test working configs
+retest_interval = 1800         # seconds before re-testing a working config
+[http]
+enabled = false                # enable HTTP servers
+port = 8080                    # subscription endpoint port
+sub_path = "/sub"              # GET /sub returns base64 of working.txt
+api_port = 8081                # management API port
+```

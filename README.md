@@ -1,127 +1,193 @@
-# VibeRay
+# Viberay Daemon
 
-A proxy configuration testing tool for Xray/V2Ray. VibeRay parses proxy URIs (Shadowsocks, VMess, VLESS, Trojan, Reality), tests connectivity, and outputs only the working configs with their latency.
+A long-running daemon that fetches proxy subscription URLs, tests each config (TCP → Xray), and serves the working ones as a subscription endpoint.
 
-## Features
+- **Supported protocols:** Shadowsocks, VMess, VLESS, Trojan, Reality
+- **Output:** Working sharelinks with latency, served as a subscription URL for Xray/V2Ray clients
+- **Daemon mode:** Loops forever, re-tests configs periodically
 
-- **Protocol Support**: SS, VMess, VLESS, Trojan, Reality
-- **Staged Testing**: TCP connectivity, TLS handshake, protocol-specific probes, Xray proxy test
-- **Original URI Output**: Working configs are printed as their exact input share link with latency appended — no reconstruction, no data loss
-- **Adaptive Depth**: Automatically selects test depth based on input size (quick/standard/full/comprehensive)
-- **Concurrent Testing**: Worker pool with configurable parallelism
-- **Result Caching**: LRU cache for duplicate server configurations
-- **Resilience**: Exponential backoff retries, dynamic parallelism reduction, checkpoint save on interrupt
-- **Multiple Output Formats**: Table (default), JSON, CSV, markdown
-- **Categorized Export**: Groups results into valid/failed/reality/legacy directories
-- **Subscription Support**: Parse base64 subscription lists or fetch from remote URLs
-- **Resume**: Save and resume test runs from checkpoint files
+---
+
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [CLI Flags](#cli-flags)
+- [HTTP API](#http-api)
+- [Test Depth Levels](#test-depth-levels)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+
+---
+
+## Prerequisites
+
+- **Go 1.26+**
+- **[Xray-core](https://github.com/XTLS/Xray-core)** (optional, required for `depth = comprehensive`)
+
+---
 
 ## Installation
 
 ```bash
-git clone https://github.com/amiralavi/viberay.git
+git clone <your-fork> viberay
 cd viberay
-make build
+go mod tidy
+go build -o build/viberayd ./cmd/viberayd
 ```
 
-Or build directly:
+This produces a single binary at `build/viberayd` (or `build/viberayd.exe` on Windows).
+
+---
+
+## Quick Start
+
+### 1. Create a subscription URL list
 
 ```bash
-go build -o build/viberay ./cmd/viberay
+echo "https://example.com/sub.txt" > urls.txt
 ```
 
-## Usage
+### 2. Create a config file
+
+```toml
+version = 1
+
+[daemon]
+urls_file = "urls.txt"
+output_file = "working.txt"
+state_file = "state.json"
+cycle_sleep = 300
+parallel = 5
+timeout = 10
+depth = "standard"
+keep_successful = true
+retest_interval = 1800
+
+[http]
+enabled = true
+port = 8080
+sub_path = "/sub"
+api_port = 8081
+```
+
+### 3. Run the daemon
 
 ```bash
-# Test configs from a file (output: working URIs with latency)
-viberay -input configs.txt
-
-# Test from stdin
-echo 'ss://YWVzLTI1Ni1nY206cGFzcw==@1.1.1.1:443#My-SS' | viberay -input -
-
-# Fetch subscription from URL
-viberay -input https://example.com/sub.txt
-
-# Quick test (TCP only)
-viberay -input configs.txt -depth quick
-
-# Full test with JSON output and categorized export
-viberay -input configs.txt -depth full -output json -out-dir ./results
-
-# Quiet mode (no progress, just results)
-viberay -input configs.txt -quiet
-
-# Resume from checkpoint
-viberay -resume checkpoint.json
+./build/viberayd -config config.toml
 ```
 
-## Test Data
+### 4. Import the subscription in your client
 
-The `testdata/` directory ships with real-world fixtures and a chunked subscription
-to make incremental testing fast:
+Use `http://localhost:8080/sub` as a subscription URL in Xray, V2RayNG, Clash, etc.
 
-- `testdata/working/proxies.txt` — 16 known-good configs
-- `testdata/not-working/proxies.txt` — 15 known-bad configs (for failure-handling tests)
-- `testdata/examples/{ss,vmess,vless,trojan,reality}.txt` — one minimal config per protocol
-- `testdata/subscriptions/chunk_000..004.txt` — 1,916-line subscription split into 5 chunks of ~400 configs each (recommended over the full 1,916-line `test.txt` for incremental work)
+---
 
-Example:
-```bash
-viberay -input testdata/subscriptions/chunk_000.txt -depth standard -concurrency 20
-```
+## Configuration
 
-All output formats (table, JSON, CSV, markdown) show only working configs, each as the **exact original share link** with the measured latency.
+### `config.toml`
 
-Example output:
+| Field | Default | Description |
+|---|---|---|
+| `version` | `1` | Config file version |
+| `urls_file` | `"urls.txt"` | File with subscription URLs (one per line, `#` for comments) |
+| `output_file` | `"working.txt"` | Working configs written here each cycle |
+| `state_file` | `"state.json"` | Persisted state across restarts |
+| `cycle_sleep` | `300` | Seconds between cycles (min 10) |
+| `parallel` | `10` | Concurrent Xray tests (1–20, clamped) |
+| `timeout` | `10` | Per-test timeout in seconds |
+| `depth` | `"standard"` | Test depth: `quick`, `standard`, `full`, `comprehensive` |
+| `keep_successful` | `true` | Re-test working configs on subsequent cycles |
+| `retest_interval` | `1800` | Seconds before re-testing a working config |
+| `http.enabled` | `false` | Enable HTTP subscription + API server |
+| `http.port` | `8080` | Subscription endpoint port |
+| `http.sub_path` | `"/sub"` | Path for subscription endpoint |
+| `http.api_port` | `8081` | Management API port |
 
-```
-vless://b9f5a731-...@185.233.131.236:443?encryption=none&security=tls#IR-Test 25ms
-trojan://Mitivpn@167.82.101.251:443?security=tls#US-Test 104ms
-```
+---
 
-### Flags
+## CLI Flags
 
 | Flag | Default | Description |
-|------|---------|-------------|
-| `-input` | `-` | Input file, `-` for stdin, or URL |
-| `-depth` | `auto` | Test depth: quick, standard, full, comprehensive, auto |
-| `-output` | `auto` | Output style: json, csv, table, markdown, auto |
-| `-concurrency` | `0` | Max parallel tests (0 = auto) |
-| `-timeout` | `0` | Per-test timeout (0 = auto) |
-| `-port-base` | `10820` | Base port for Xray SOCKS proxies |
-| `-xray-bin` | `xray` | Path to Xray binary |
-| `-retry` | `-1` | Max retries per config (-1 = auto) |
-| `-out-dir` | `` | Directory for categorized exports |
-| `-checkpoint-dir` | `` | Directory for checkpoint files |
-| `-resume` | `` | Resume from checkpoint file |
-| `-verbose` | `false` | Debug logging |
-| `-quiet` | `false` | Suppress progress output |
-| `-no-cache` | `false` | Disable result caching |
+|---|---|---|
+| `-config` | `"config.toml"` | Path to config file |
+| `-once` | `false` | Run a single test cycle and exit |
+
+Example: `./viberayd -config myconfig.toml -once`
+
+---
+
+## HTTP API
+
+When `http.enabled = true`, two HTTP servers start:
+
+### Subscription endpoint (`:8080`)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/sub` | Returns base64 of `working.txt` (valid subscription for Xray) |
+
+### Management API (`:8081`)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/health` | Liveness probe: `{"status":"ok"}` |
+| `GET` | `/api/urls` | List configured subscription URLs |
+| `POST` | `/api/urls` | Add a URL: `{"url":"https://..."}` |
+| `DELETE` | `/api/urls/{line}` | Remove URL by line number (1-indexed) |
+| `GET` | `/api/stats` | Counts: total, working, failed, unreachable |
+| `POST` | `/api/cycle/trigger` | Force immediate test cycle |
+| `GET` | `/api/configs?page=1&per_page=50` | Paginated config list with states |
+
+---
 
 ## Test Depth Levels
 
-| Level | Stages | Use Case |
-|-------|--------|----------|
-| quick | TCP only | Large batches, simple health check |
-| standard | TCP + TLS | Moderate batches with TLS configs |
-| full | TCP + TLS + Protocol | Small batches, detailed validation |
-| comprehensive | Full + Xray proxy | Critical configs, end-to-end test |
+| Level | Stages Run | When to use |
+|---|---|---|
+| `quick` | TCP only | Large batches, simple health check |
+| `standard` | TCP + TLS | Default — good balance |
+| `full` | TCP + TLS + Protocol handshake | Small batches, detailed validation |
+| `comprehensive` | Full + Xray proxy test | Critical configs, end-to-end |
+
+---
 
 ## Architecture
 
 ```
-Input (file/stdin/URL)
-  -> Parser (protocol detection, validation, stores Raw URI)
-    -> Orchestrator (adaptive depth, concurrency, caching)
-      -> Tester (TCP -> TLS -> Protocol -> Xray)
-        -> Output (only working configs: <raw URI> <latency>)
+Daemon loop (every cycle_sleep seconds):
+  urls.txt
+    → HTTP fetch each subscription URL
+    → Parse sharelinks (base64 or plain)
+    → Deduplicate by SHA256
+    → Merge into state.json (new = "unknown")
+    → Select candidates due for testing
+    → TCP ping filter (parallel, fast, removes unreachable)
+    → Xray test pool (bounded by `parallel`, 1-20)
+    → Apply results to state
+    → Write working.txt
+    → Sleep
 ```
 
-## Requirements
+The daemon uses a **two-stage filter**: a lightweight TCP ping pass (high concurrency, short timeout) removes dead hosts before expensive Xray tests.
 
-- Go 1.26 or later
-- [Xray-core](https://github.com/XTLS/Xray-core) (optional, for comprehensive depth tests)
+---
 
-## License
+## Project Structure
 
-MIT
+```
+cmd/viberayd/              # daemon binary
+internal/daemon/           # daemon logic (config, state, fetcher, tester, loop, http, signals)
+internal/tester/           # testing pipeline (TCP → TLS → Protocol → Xray)
+internal/concurrency/      # worker pool, port manager, xray process pool
+internal/models/           # domain types (ProxyConfig, TestResult, TestDepth)
+internal/cache/            # DNS + result caches
+internal/errors/           # sentinel errors
+internal/output/           # output formatters
+internal/orchestrator/     # heuristic decision layer
+internal/logging/          # logger setup
+pkg/parser/                # sharelink parsers (SS, VMess, VLESS, Trojan, Reality)
+pkg/fetcher/               # HTTP subscription fetcher
+```

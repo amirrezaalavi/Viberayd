@@ -1,0 +1,7 @@
+# Subscription URLs — one per line, lines starting with # are ignored
+# Both base64-encoded and plain-text subscriptions are supported.
+#
+# Example:
+# https://raw.githubusercontent.com/barry-far/V2ray-Config/refs/heads/main/Sub2.txt
+# https://raw.githubusercontent.com/ALIILAPRO/v2rayNG-Config/main/sub.txt
+#

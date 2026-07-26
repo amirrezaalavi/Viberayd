@@ -1,16 +1,20 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/amirrezaalavi/Viberay/internal/daemon"
 )
 
 func main() {
 	configPath := flag.String("config", "config.toml", "path to configuration file")
+	singleCycle := flag.Bool("once", false, "run a single cycle and exit")
 	flag.Parse()
 
 	logLevel := &slog.LevelVar{}
@@ -42,5 +46,31 @@ func main() {
 		cfg.HTTP.SubPath,
 		cfg.HTTP.APIPort,
 	)
+
+	d := daemon.NewDaemon(&cfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigCh
+		slog.Info("received signal, shutting down", "signal", sig)
+		cancel()
+	}()
+
+	if *singleCycle {
+		if err := d.RunCycle(ctx); err != nil {
+			slog.Error("cycle failed", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		if err := d.Run(ctx); err != nil {
+			slog.Error("daemon failed", "error", err)
+			os.Exit(1)
+		}
+	}
+
 	fmt.Println("viberayd stopped.")
 }

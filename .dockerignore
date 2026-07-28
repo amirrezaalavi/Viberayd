@@ -1,6 +1,4 @@
 build/
 .git/
 *.md
-*.txt
-*.example
-testdata/
+coverage.out

@@ -21,6 +21,14 @@ func DetectProtocol(raw string) (models.Protocol, error) {
 		return models.ProtocolTrojan, nil
 	case strings.HasPrefix(raw, "ss://"):
 		return models.ProtocolSS, nil
+	case strings.HasPrefix(raw, "hysteria2://"), strings.HasPrefix(raw, "hy2://"):
+		return models.ProtocolHysteria2, nil
+	case strings.HasPrefix(raw, "tuic://"):
+		return models.ProtocolTUIC, nil
+	case strings.HasPrefix(raw, "wireguard://"):
+		return models.ProtocolWireGuard, nil
+	case strings.HasPrefix(raw, "socks5://"), strings.HasPrefix(raw, "socks4://"), strings.HasPrefix(raw, "socks://"):
+		return models.ProtocolSocks5, nil
 	default:
 		return "", errors.ErrInvalidProtocol
 	}

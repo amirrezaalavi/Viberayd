@@ -144,6 +144,52 @@ func BenchmarkParse_Batch_2000(b *testing.B) {
 
 // --- Benchmarks for DetectProtocol ---
 
+func BenchmarkParseSingle_WireGuard(b *testing.B) {
+	uri := loadFixture("../../testdata/examples/wireguard.txt")
+	if uri == "" {
+		b.Skip("wireguard.txt fixture not found")
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ParseSingle(uri)
+	}
+}
+
+func BenchmarkParseSingle_TUIC(b *testing.B) {
+	uri := loadFixture("../../testdata/examples/tuic.txt")
+	if uri == "" {
+		b.Skip("tuic.txt fixture not found")
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ParseSingle(uri)
+	}
+}
+
+func BenchmarkParseSingle_Hysteria2(b *testing.B) {
+	uri := loadFixture("../../testdata/examples/hysteria2.txt")
+	if uri == "" {
+		b.Skip("hysteria2.txt fixture not found")
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ParseSingle(uri)
+	}
+}
+
+func BenchmarkParseSingle_Socks5(b *testing.B) {
+	uri := loadFixture("../../testdata/examples/socks5.txt")
+	if uri == "" {
+		b.Skip("socks5.txt fixture not found")
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ParseSingle(uri)
+	}
+}
+
+// --- Benchmarks for DetectProtocol ---
+
 func BenchmarkDetectProtocol(b *testing.B) {
 	uris := loadSubscription("../../testdata/subscriptions/chunk_000.txt")
 	if len(uris) == 0 {

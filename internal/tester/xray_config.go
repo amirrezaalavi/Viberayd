@@ -2,6 +2,9 @@ package tester
 
 import (
 	"fmt"
+	"net"
+	"strconv"
+	"strings"
 
 	"github.com/amirrezaalavi/Viberay/internal/models"
 )
@@ -71,6 +74,14 @@ func buildOutbound(cfg models.ProxyConfig) (map[string]any, error) {
 		return buildTrojanOutbound(cfg.Trojan), nil
 	case models.ProtocolReality:
 		return buildRealityOutbound(cfg.Reality), nil
+	case models.ProtocolWireGuard:
+		return buildWireGuardOutbound(cfg.WireGuard), nil
+	case models.ProtocolTUIC:
+		return buildTUICOutbound(cfg.TUIC), nil
+	case models.ProtocolHysteria2:
+		return buildHysteria2Outbound(cfg.Hysteria2), nil
+	case models.ProtocolSocks5:
+		return buildSocks5Outbound(cfg.Socks5), nil
 	default:
 		return nil, fmt.Errorf("unsupported protocol: %s", cfg.Protocol())
 	}
@@ -371,3 +382,181 @@ func buildRealityOutbound(cfg *models.RealityConfig) map[string]any {
 		"streamSettings": stream,
 	}
 }
+func buildWireGuardOutbound(cfg *models.WireGuardConfig) map[string]any {
+	if cfg == nil {
+		return map[string]any{"tag": "proxy", "protocol": "wireguard"}
+	}
+	reserved := []int{0, 0, 0}
+	if cfg.Reserved != "" {
+		parts := strings.Split(cfg.Reserved, ",")
+		if len(parts) == 3 {
+			r0, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
+			r1, _ := strconv.Atoi(strings.TrimSpace(parts[1]))
+			r2, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
+			reserved = []int{r0, r1, r2}
+		}
+	}
+	mtu := cfg.MTU
+	if mtu <= 0 {
+		mtu = 1420
+	}
+	address := cfg.LocalAddress
+	if address == "" {
+		address = "172.16.0.2/32"
+	}
+	allowedIPs := []string{"0.0.0.0/0", "::/0"}
+	if cfg.AllowedIPs != "" {
+		allowedIPs = strings.Split(cfg.AllowedIPs, ",")
+	}
+	return map[string]any{
+		"tag":      "proxy",
+		"protocol": "wireguard",
+		"settings": map[string]any{
+			"secretKey": cfg.PrivateKey,
+			"address":   strings.Split(address, ","),
+			"peers": []map[string]any{{
+				"endpoint":    net.JoinHostPort(cfg.Server, strconv.Itoa(int(cfg.Port))),
+				"publicKey":   cfg.PublicKey,
+				"preSharedKey": cfg.PresharedKey,
+				"allowedIPs":  allowedIPs,
+			}},
+			"mtu":      mtu,
+			"reserved": reserved,
+		},
+	}
+}
+
+func buildTUICOutbound(cfg *models.TUICConfig) map[string]any {
+	if cfg == nil {
+		return map[string]any{"tag": "proxy", "protocol": "tuic"}
+	}
+	cc := cfg.CongestionControl
+	if cc == "" {
+		cc = "bbr"
+	}
+	udpMode := cfg.UDPRelayMode
+	if udpMode == "" {
+		udpMode = "native"
+	}
+	settings := map[string]any{
+		"uuid":              cfg.UUID,
+		"password":          cfg.Password,
+		"congestion_control": cc,
+		"udp_relay_mode":    udpMode,
+	}
+	if cfg.Heartbeat != "" {
+		settings["heartbeat"] = cfg.Heartbeat
+	}
+	if cfg.ReduceRTT {
+		settings["reduce_rtt"] = true
+	}
+	if cfg.RequestTimeout != "" {
+		settings["request_timeout"] = cfg.RequestTimeout
+	}
+	tlsSettings := map[string]any{}
+	if cfg.SNI != "" {
+		tlsSettings["serverName"] = cfg.SNI
+	}
+	if cfg.ALPN != "" {
+		tlsSettings["alpn"] = []string{cfg.ALPN}
+	} else {
+		tlsSettings["alpn"] = []string{"h3"}
+	}
+	if cfg.Fingerprint != "" {
+		tlsSettings["fingerprint"] = cfg.Fingerprint
+	}
+	if cfg.SkipVerify {
+		tlsSettings["allowInsecure"] = true
+	}
+	stream := map[string]any{
+		"network":  "quic",
+		"security": "tls",
+	}
+	if len(tlsSettings) > 0 {
+		stream["tlsSettings"] = tlsSettings
+	}
+	return map[string]any{
+		"tag":            "proxy",
+		"protocol":       "tuic",
+		"settings":       settings,
+		"streamSettings": stream,
+	}
+}
+
+func buildHysteria2Outbound(cfg *models.Hysteria2Config) map[string]any {
+	if cfg == nil {
+		return map[string]any{"tag": "proxy", "protocol": "hysteria2"}
+	}
+	settings := map[string]any{
+		"auth":    cfg.Auth,
+		"version": 2,
+	}
+	if cfg.UpMbps > 0 {
+		settings["up"] = strconv.Itoa(cfg.UpMbps) + " mbps"
+	}
+	if cfg.DownMbps > 0 {
+		settings["down"] = strconv.Itoa(cfg.DownMbps) + " mbps"
+	}
+	if cfg.ObfsType != "" {
+		obfs := map[string]any{"type": cfg.ObfsType}
+		if cfg.ObfsPassword != "" {
+			obfs["password"] = cfg.ObfsPassword
+		}
+		settings["obfs"] = obfs
+	}
+	if cfg.Ports != "" {
+		settings["ports"] = cfg.Ports
+	}
+	tlsSettings := map[string]any{}
+	if cfg.SNI != "" {
+		tlsSettings["serverName"] = cfg.SNI
+	}
+	if cfg.ALPN != "" {
+		tlsSettings["alpn"] = []string{cfg.ALPN}
+	} else {
+		tlsSettings["alpn"] = []string{"h3"}
+	}
+	if cfg.Fingerprint != "" {
+		tlsSettings["fingerprint"] = cfg.Fingerprint
+	}
+	if cfg.SkipVerify {
+		tlsSettings["allowInsecure"] = true
+	}
+	stream := map[string]any{
+		"network":  "hysteria2",
+		"security": "tls",
+	}
+	if len(tlsSettings) > 0 {
+		stream["tlsSettings"] = tlsSettings
+	}
+	return map[string]any{
+		"tag":            "proxy",
+		"protocol":       "hysteria2",
+		"settings":       settings,
+		"streamSettings": stream,
+	}
+}
+
+func buildSocks5Outbound(cfg *models.Socks5Config) map[string]any {
+	if cfg == nil {
+		return map[string]any{"tag": "proxy", "protocol": "socks"}
+	}
+	server := map[string]any{
+		"address": cfg.Server,
+		"port":    cfg.Port,
+	}
+	if cfg.Username != "" || cfg.Password != "" {
+		server["users"] = []map[string]any{{
+			"user": cfg.Username,
+			"pass": cfg.Password,
+		}}
+	}
+	return map[string]any{
+		"tag":      "proxy",
+		"protocol": "socks",
+		"settings": map[string]any{
+			"servers": []map[string]any{server},
+		},
+	}
+}
+

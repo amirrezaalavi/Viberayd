@@ -5,7 +5,7 @@
 
 A long-running daemon that fetches proxy subscription URLs, tests each config (TCP → Xray), and serves the working ones as a subscription endpoint.
 
-- **Supported protocols:** Shadowsocks, VMess, VLESS, Trojan, Reality
+- **Supported protocols:** Shadowsocks, VMess, VLESS, Trojan, Reality, WireGuard, TUIC, Hysteria2, SOCKS5
 - **Output:** Working sharelinks with latency, served as a subscription URL for Xray/V2Ray clients
 - **Daemon mode:** Loops forever, re-tests configs periodically
 

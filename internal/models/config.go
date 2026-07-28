@@ -15,12 +15,17 @@ const (
 	ProtocolVLess   Protocol = "vless"
 	ProtocolTrojan  Protocol = "trojan"
 	ProtocolReality Protocol = "reality"
+	ProtocolWireGuard Protocol = "wireguard"
+	ProtocolTUIC      Protocol = "tuic"
+	ProtocolHysteria2 Protocol = "hysteria2"
+	ProtocolSocks5    Protocol = "socks5"
 )
 
 // IsValid reports whether p is a known protocol.
 func (p Protocol) IsValid() bool {
 	switch p {
-	case ProtocolSS, ProtocolVMess, ProtocolVLess, ProtocolTrojan, ProtocolReality:
+	case ProtocolSS, ProtocolVMess, ProtocolVLess, ProtocolTrojan, ProtocolReality,
+		ProtocolWireGuard, ProtocolTUIC, ProtocolHysteria2, ProtocolSocks5:
 		return true
 	}
 	return false
@@ -118,6 +123,71 @@ func (r *RealityConfig) String() string {
 	return fmt.Sprintf("Reality[%s:%d %s]", r.Server, r.Port, r.UUID)
 }
 
+
+// WireGuardConfig represents a WireGuard configuration.
+type WireGuardConfig struct {
+	BaseConfig
+	PrivateKey   string
+	PublicKey    string
+	PresharedKey string
+	LocalAddress string
+	DNS          string
+	MTU          int
+	Reserved     string
+	AllowedIPs   string
+	KernelMode   bool
+}
+
+func (w *WireGuardConfig) String() string {
+	return fmt.Sprintf("WireGuard[%s:%d]", w.Server, w.Port)
+}
+
+// TUICConfig represents a TUIC configuration.
+type TUICConfig struct {
+	BaseConfig
+	TLSConfig
+	UUID              string
+	Password          string
+	CongestionControl string
+	UDPRelayMode      string
+	Heartbeat         string
+	ReduceRTT         bool
+	RequestTimeout    string
+}
+
+func (t *TUICConfig) String() string {
+	return fmt.Sprintf("TUIC[%s:%d]", t.Server, t.Port)
+}
+
+// Hysteria2Config represents a Hysteria2 configuration.
+type Hysteria2Config struct {
+	BaseConfig
+	TLSConfig
+	Auth         string
+	ObfsType     string
+	ObfsPassword string
+	UpMbps       int
+	DownMbps     int
+	Ports        string
+	HopInterval  int
+}
+
+func (h *Hysteria2Config) String() string {
+	return fmt.Sprintf("Hysteria2[%s:%d]", h.Server, h.Port)
+}
+
+// Socks5Config represents a SOCKS5 configuration.
+type Socks5Config struct {
+	BaseConfig
+	Username string
+	Password string
+	UDP      bool
+}
+
+func (s *Socks5Config) String() string {
+	return fmt.Sprintf("Socks5[%s:%d]", s.Server, s.Port)
+}
+
 // ProxyConfig is a tagged-union that can hold any supported configuration type.
 // Only one pointer field is non-nil at a time.
 type ProxyConfig struct {
@@ -125,7 +195,11 @@ type ProxyConfig struct {
 	VMess   *VMessConfig
 	VLess   *VLessConfig
 	Trojan  *TrojanConfig
-	Reality *RealityConfig
+	Reality   *RealityConfig
+	WireGuard *WireGuardConfig
+	TUIC      *TUICConfig
+	Hysteria2 *Hysteria2Config
+	Socks5    *Socks5Config
 	Raw     string `json:"raw,omitempty" yaml:"raw,omitempty"` // original input URI
 }
 
@@ -142,6 +216,14 @@ func (p ProxyConfig) Protocol() Protocol {
 		return ProtocolTrojan
 	case p.Reality != nil:
 		return ProtocolReality
+	case p.WireGuard != nil:
+		return ProtocolWireGuard
+	case p.TUIC != nil:
+		return ProtocolTUIC
+	case p.Hysteria2 != nil:
+		return ProtocolHysteria2
+	case p.Socks5 != nil:
+		return ProtocolSocks5
 	}
 	return ""
 }
@@ -159,6 +241,14 @@ func (p ProxyConfig) Name() string {
 		return p.Trojan.Name
 	case p.Reality != nil:
 		return p.Reality.Name
+	case p.WireGuard != nil:
+		return p.WireGuard.Name
+	case p.TUIC != nil:
+		return p.TUIC.Name
+	case p.Hysteria2 != nil:
+		return p.Hysteria2.Name
+	case p.Socks5 != nil:
+		return p.Socks5.Name
 	}
 	return ""
 }
@@ -176,6 +266,14 @@ func (p ProxyConfig) Addr() string {
 		return p.Trojan.Addr()
 	case p.Reality != nil:
 		return p.Reality.Addr()
+	case p.WireGuard != nil:
+		return p.WireGuard.Addr()
+	case p.TUIC != nil:
+		return p.TUIC.Addr()
+	case p.Hysteria2 != nil:
+		return p.Hysteria2.Addr()
+	case p.Socks5 != nil:
+		return p.Socks5.Addr()
 	}
 	return ""
 }
@@ -193,6 +291,14 @@ func (p ProxyConfig) String() string {
 		return p.Trojan.String()
 	case p.Reality != nil:
 		return p.Reality.String()
+	case p.WireGuard != nil:
+		return p.WireGuard.String()
+	case p.TUIC != nil:
+		return p.TUIC.String()
+	case p.Hysteria2 != nil:
+		return p.Hysteria2.String()
+	case p.Socks5 != nil:
+		return p.Socks5.String()
 	}
 	return "ProxyConfig<empty>"
 }
@@ -210,6 +316,14 @@ func (p ProxyConfig) Base() BaseConfig {
 		return p.Trojan.BaseConfig
 	case p.Reality != nil:
 		return p.Reality.BaseConfig
+	case p.WireGuard != nil:
+		return p.WireGuard.BaseConfig
+	case p.TUIC != nil:
+		return p.TUIC.BaseConfig
+	case p.Hysteria2 != nil:
+		return p.Hysteria2.BaseConfig
+	case p.Socks5 != nil:
+		return p.Socks5.BaseConfig
 	}
 	return BaseConfig{}
 }

@@ -122,6 +122,34 @@ func ParseSingle(raw string) (models.ProxyConfig, error) {
 		}
 		return models.ProxyConfig{Reality: cfg, Raw: raw}, nil
 
+	case models.ProtocolHysteria2:
+		cfg, err := parseHysteria2(raw)
+		if err != nil {
+			return models.ProxyConfig{}, err
+		}
+		return models.ProxyConfig{Hysteria2: cfg, Raw: raw}, nil
+
+	case models.ProtocolTUIC:
+		cfg, err := parseTUIC(raw)
+		if err != nil {
+			return models.ProxyConfig{}, err
+		}
+		return models.ProxyConfig{TUIC: cfg, Raw: raw}, nil
+
+	case models.ProtocolWireGuard:
+		cfg, err := parseWireGuard(raw)
+		if err != nil {
+			return models.ProxyConfig{}, err
+		}
+		return models.ProxyConfig{WireGuard: cfg, Raw: raw}, nil
+
+	case models.ProtocolSocks5:
+		cfg, err := parseSocks5(raw)
+		if err != nil {
+			return models.ProxyConfig{}, err
+		}
+		return models.ProxyConfig{Socks5: cfg, Raw: raw}, nil
+
 	default:
 		return models.ProxyConfig{}, errors.ErrInvalidProtocol
 	}

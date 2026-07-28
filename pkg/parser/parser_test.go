@@ -1000,3 +1000,484 @@ func TestParseReality_GRPC(t *testing.T) {
 		t.Errorf("expected Path=api.v1.StreamService, got %q", cfg.Reality.TLSConfig.Path)
 	}
 }
+
+// --- WireGuard ---
+
+func TestParseWireGuard_StandardURI(t *testing.T) {
+	input := "wireguard://uFXxaZmMhYmBzA7jRdqjuPnlmgZcLExPUkZeiRGySH0=@192.0.2.1:51820?publicKey=HI1yN4GzQGQtc1cN1EJa0fPbYZaNoz%2BdYqNHxIk%2FWGQ%3D&address=10.0.0.2/32&dns=1.1.1.1&mtu=1280&allowedIPs=0.0.0.0/0,::/0&reserved=0,0,0#MyWG"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle wireguard URI: %v", err)
+	}
+	if cfg.WireGuard == nil {
+		t.Fatal("expected WireGuard config")
+	}
+	if cfg.Protocol() != models.ProtocolWireGuard {
+		t.Errorf("Protocol() = %v, want wireguard", cfg.Protocol())
+	}
+	if cfg.WireGuard.Server != "192.0.2.1" {
+		t.Errorf("Server = %q, want 192.0.2.1", cfg.WireGuard.Server)
+	}
+	if cfg.WireGuard.Port != 51820 {
+		t.Errorf("Port = %d, want 51820", cfg.WireGuard.Port)
+	}
+	if cfg.WireGuard.PublicKey != "HI1yN4GzQGQtc1cN1EJa0fPbYZaNoz+dYqNHxIk/WGQ=" {
+		t.Errorf("PublicKey = %q", cfg.WireGuard.PublicKey)
+	}
+	if cfg.WireGuard.LocalAddress != "10.0.0.2/32" {
+		t.Errorf("LocalAddress = %q", cfg.WireGuard.LocalAddress)
+	}
+	if cfg.WireGuard.MTU != 1280 {
+		t.Errorf("MTU = %d, want 1280", cfg.WireGuard.MTU)
+	}
+	if cfg.WireGuard.Name != "MyWG" {
+		t.Errorf("Name = %q, want MyWG", cfg.WireGuard.Name)
+	}
+}
+
+func TestParseWireGuard_Base64JSON(t *testing.T) {
+	jsonStr := `{"privateKey":"abc123","publicKey":"xyz789","address":"10.0.0.2/32","endpoint":"wg.example.com:51820","dns":"1.1.1.1","mtu":1420}`
+	encoded := base64.StdEncoding.EncodeToString([]byte(jsonStr))
+	input := "wireguard://" + encoded + "#WG-JSON"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle wireguard JSON: %v", err)
+	}
+	if cfg.WireGuard == nil {
+		t.Fatal("expected WireGuard config")
+	}
+	if cfg.WireGuard.Server != "wg.example.com" {
+		t.Errorf("Server = %q, want wg.example.com", cfg.WireGuard.Server)
+	}
+	if cfg.WireGuard.Port != 51820 {
+		t.Errorf("Port = %d, want 51820", cfg.WireGuard.Port)
+	}
+	if cfg.WireGuard.PrivateKey != "abc123" {
+		t.Errorf("PrivateKey = %q, want abc123", cfg.WireGuard.PrivateKey)
+	}
+	if cfg.WireGuard.PublicKey != "xyz789" {
+		t.Errorf("PublicKey = %q, want xyz789", cfg.WireGuard.PublicKey)
+	}
+	if cfg.WireGuard.Name != "WG-JSON" {
+		t.Errorf("Name = %q, want WG-JSON", cfg.WireGuard.Name)
+	}
+}
+
+func TestParseWireGuard_Defaults(t *testing.T) {
+	input := "wireguard://key@192.0.2.1:51820?publicKey=pubkey&address=10.0.0.2/32"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle wireguard defaults: %v", err)
+	}
+	if cfg.WireGuard.MTU != 1420 {
+		t.Errorf("MTU default = %d, want 1420", cfg.WireGuard.MTU)
+	}
+	if cfg.WireGuard.AllowedIPs != "" {
+		t.Errorf("AllowedIPs = %q, want empty", cfg.WireGuard.AllowedIPs)
+	}
+	if cfg.WireGuard.DNS != "" {
+		t.Errorf("DNS = %q, want empty", cfg.WireGuard.DNS)
+	}
+}
+
+func TestParseWireGuard_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"missing @", "wireguard://notavaliduri"},
+		{"missing public key", "wireguard://key@host:51820"},
+		{"missing private key", "wireguard://@host:51820?publicKey=pubkey"},
+		{"missing server", "wireguard://key@:51820?publicKey=pubkey"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseSingle(tt.input)
+			if err == nil {
+				t.Errorf("ParseSingle(%q) expected error", tt.input)
+			}
+		})
+	}
+}
+
+// --- TUIC ---
+
+func TestParseTUIC_Standard(t *testing.T) {
+	input := "tuic://a1b2c3d4-e5f6-7890-abcd-ef1234567890:mypass@192.0.2.1:443?sni=example.com&congestion_control=bbr&udp_relay_mode=native&alpn=h3&reduce_rtt=1#MyTUIC"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle TUIC: %v", err)
+	}
+	if cfg.TUIC == nil {
+		t.Fatal("expected TUIC config")
+	}
+	if cfg.Protocol() != models.ProtocolTUIC {
+		t.Errorf("Protocol() = %v, want tuic", cfg.Protocol())
+	}
+	if cfg.TUIC.Server != "192.0.2.1" {
+		t.Errorf("Server = %q", cfg.TUIC.Server)
+	}
+	if cfg.TUIC.Port != 443 {
+		t.Errorf("Port = %d, want 443", cfg.TUIC.Port)
+	}
+	if cfg.TUIC.UUID != "a1b2c3d4-e5f6-7890-abcd-ef1234567890" {
+		t.Errorf("UUID = %q", cfg.TUIC.UUID)
+	}
+	if cfg.TUIC.Password != "mypass" {
+		t.Errorf("Password = %q", cfg.TUIC.Password)
+	}
+	if cfg.TUIC.SNI != "example.com" {
+		t.Errorf("SNI = %q", cfg.TUIC.SNI)
+	}
+	if cfg.TUIC.CongestionControl != "bbr" {
+		t.Errorf("CongestionControl = %q", cfg.TUIC.CongestionControl)
+	}
+	if cfg.TUIC.UDPRelayMode != "native" {
+		t.Errorf("UDPRelayMode = %q", cfg.TUIC.UDPRelayMode)
+	}
+	if !cfg.TUIC.ReduceRTT {
+		t.Error("ReduceRTT should be true")
+	}
+	if cfg.TUIC.ALPN != "h3" {
+		t.Errorf("ALPN = %q", cfg.TUIC.ALPN)
+	}
+	if cfg.TUIC.Name != "MyTUIC" {
+		t.Errorf("Name = %q", cfg.TUIC.Name)
+	}
+}
+
+func TestParseTUIC_Minimal(t *testing.T) {
+	input := "tuic://a1b2c3d4-e5f6-7890-abcd-ef1234567890:mypass@tuic.example.com:443"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle TUIC minimal: %v", err)
+	}
+	if cfg.TUIC.CongestionControl != "bbr" {
+		t.Errorf("default CongestionControl = %q, want bbr", cfg.TUIC.CongestionControl)
+	}
+	if cfg.TUIC.UDPRelayMode != "native" {
+		t.Errorf("default UDPRelayMode = %q, want native", cfg.TUIC.UDPRelayMode)
+	}
+	if cfg.TUIC.Port != 443 {
+		t.Errorf("default Port = %d, want 443", cfg.TUIC.Port)
+	}
+}
+
+func TestParseTUIC_TLSDefaults(t *testing.T) {
+	input := "tuic://a1b2c3d4-e5f6-7890-abcd-ef1234567890:mypass@192.0.2.1:443"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle: %v", err)
+	}
+	if !cfg.TUIC.Enabled {
+		t.Error("TLS should be enabled by default for TUIC")
+	}
+}
+
+func TestParseTUIC_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"bad UUID", "tuic://bad-uuid:pass@host:443"},
+		{"missing server", "tuic://uuid:pass@:443"},
+		{"empty after prefix", "tuic://"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseSingle(tt.input)
+			if err == nil {
+				t.Errorf("ParseSingle(%q) expected error", tt.input)
+			}
+		})
+	}
+}
+
+// --- Hysteria2 ---
+
+func TestParseHysteria2_Full(t *testing.T) {
+	input := "hysteria2://myauth@192.0.2.1:443?obfs=salamander&obfs-password=obfspass&up=100&down=200&sni=example.com&alpn=h3&insecure=1&ports=2000-3000,4000&hopInterval=60#MyHy2"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle hysteria2: %v", err)
+	}
+	if cfg.Hysteria2 == nil {
+		t.Fatal("expected Hysteria2 config")
+	}
+	if cfg.Protocol() != models.ProtocolHysteria2 {
+		t.Errorf("Protocol() = %v, want hysteria2", cfg.Protocol())
+	}
+	if cfg.Hysteria2.Server != "192.0.2.1" {
+		t.Errorf("Server = %q", cfg.Hysteria2.Server)
+	}
+	if cfg.Hysteria2.Port != 443 {
+		t.Errorf("Port = %d, want 443", cfg.Hysteria2.Port)
+	}
+	if cfg.Hysteria2.Auth != "myauth" {
+		t.Errorf("Auth = %q", cfg.Hysteria2.Auth)
+	}
+	if cfg.Hysteria2.ObfsType != "salamander" {
+		t.Errorf("ObfsType = %q", cfg.Hysteria2.ObfsType)
+	}
+	if cfg.Hysteria2.ObfsPassword != "obfspass" {
+		t.Errorf("ObfsPassword = %q", cfg.Hysteria2.ObfsPassword)
+	}
+	if cfg.Hysteria2.UpMbps != 100 {
+		t.Errorf("UpMbps = %d, want 100", cfg.Hysteria2.UpMbps)
+	}
+	if cfg.Hysteria2.DownMbps != 200 {
+		t.Errorf("DownMbps = %d, want 200", cfg.Hysteria2.DownMbps)
+	}
+	if cfg.Hysteria2.SNI != "example.com" {
+		t.Errorf("SNI = %q", cfg.Hysteria2.SNI)
+	}
+	if cfg.Hysteria2.ALPN != "h3" {
+		t.Errorf("ALPN = %q", cfg.Hysteria2.ALPN)
+	}
+	if !cfg.Hysteria2.SkipVerify {
+		t.Error("SkipVerify should be true")
+	}
+	if cfg.Hysteria2.Ports != "2000-3000,4000" {
+		t.Errorf("Ports = %q", cfg.Hysteria2.Ports)
+	}
+	if cfg.Hysteria2.HopInterval != 60 {
+		t.Errorf("HopInterval = %d, want 60", cfg.Hysteria2.HopInterval)
+	}
+	if cfg.Hysteria2.Name != "MyHy2" {
+		t.Errorf("Name = %q", cfg.Hysteria2.Name)
+	}
+}
+
+func TestParseHysteria2_Minimal(t *testing.T) {
+	input := "hysteria2://myauth@hy2.example.com:443"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle hysteria2 minimal: %v", err)
+	}
+	if cfg.Hysteria2.Auth != "myauth" {
+		t.Errorf("Auth = %q", cfg.Hysteria2.Auth)
+	}
+	if cfg.Hysteria2.Port != 443 {
+		t.Errorf("Port = %d, want 443", cfg.Hysteria2.Port)
+	}
+	if cfg.Hysteria2.UpMbps != 0 {
+		t.Errorf("UpMbps = %d, want 0 (unset)", cfg.Hysteria2.UpMbps)
+	}
+	if cfg.Hysteria2.HopInterval != 30 {
+		t.Errorf("default HopInterval = %d, want 30", cfg.Hysteria2.HopInterval)
+	}
+}
+
+func TestParseHysteria2_Hy2Prefix(t *testing.T) {
+	input := "hy2://myauth@192.0.2.1:443#Hy2Prefix"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle hy2 prefix: %v", err)
+	}
+	if cfg.Hysteria2 == nil {
+		t.Fatal("expected Hysteria2 config from hy2:// prefix")
+	}
+	if cfg.Hysteria2.Server != "192.0.2.1" {
+		t.Errorf("Server = %q", cfg.Hysteria2.Server)
+	}
+	if cfg.Hysteria2.Port != 443 {
+		t.Errorf("Port = %d", cfg.Hysteria2.Port)
+	}
+	if cfg.Hysteria2.Name != "Hy2Prefix" {
+		t.Errorf("Name = %q", cfg.Hysteria2.Name)
+	}
+}
+
+func TestParseHysteria2_Obfs(t *testing.T) {
+	input := "hysteria2://auth@host:443?obfs=salamander&obfs-password=secret"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle hysteria2 obfs: %v", err)
+	}
+	if cfg.Hysteria2.ObfsType != "salamander" {
+		t.Errorf("ObfsType = %q, want salamander", cfg.Hysteria2.ObfsType)
+	}
+	if cfg.Hysteria2.ObfsPassword != "secret" {
+		t.Errorf("ObfsPassword = %q, want secret", cfg.Hysteria2.ObfsPassword)
+	}
+}
+
+func TestParseHysteria2_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"missing auth", "hysteria2://@host:443"},
+		{"missing server", "hysteria2://auth@:443"},
+		{"bad port", "hysteria2://auth@host:99999"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseSingle(tt.input)
+			if err == nil {
+				t.Errorf("ParseSingle(%q) expected error", tt.input)
+			}
+		})
+	}
+}
+
+// --- Socks5 ---
+
+func TestParseSocks5_WithAuth(t *testing.T) {
+	input := "socks5://myuser:mypass@192.0.2.1:1080#MySocks5"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle socks5 with auth: %v", err)
+	}
+	if cfg.Socks5 == nil {
+		t.Fatal("expected Socks5 config")
+	}
+	if cfg.Protocol() != models.ProtocolSocks5 {
+		t.Errorf("Protocol() = %v, want socks5", cfg.Protocol())
+	}
+	if cfg.Socks5.Server != "192.0.2.1" {
+		t.Errorf("Server = %q", cfg.Socks5.Server)
+	}
+	if cfg.Socks5.Port != 1080 {
+		t.Errorf("Port = %d, want 1080", cfg.Socks5.Port)
+	}
+	if cfg.Socks5.Username != "myuser" {
+		t.Errorf("Username = %q", cfg.Socks5.Username)
+	}
+	if cfg.Socks5.Password != "mypass" {
+		t.Errorf("Password = %q", cfg.Socks5.Password)
+	}
+	if cfg.Socks5.Name != "MySocks5" {
+		t.Errorf("Name = %q", cfg.Socks5.Name)
+	}
+}
+
+func TestParseSocks5_WithoutAuth(t *testing.T) {
+	input := "socks5://192.0.2.1:1080#NoAuth"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle socks5 without auth: %v", err)
+	}
+	if cfg.Socks5.Server != "192.0.2.1" {
+		t.Errorf("Server = %q", cfg.Socks5.Server)
+	}
+	if cfg.Socks5.Username != "" {
+		t.Errorf("Username = %q, want empty", cfg.Socks5.Username)
+	}
+	if cfg.Socks5.Password != "" {
+		t.Errorf("Password = %q, want empty", cfg.Socks5.Password)
+	}
+	if cfg.Socks5.Name != "NoAuth" {
+		t.Errorf("Name = %q", cfg.Socks5.Name)
+	}
+}
+
+func TestParseSocks5_IPv6(t *testing.T) {
+	input := "socks5://user:pass@[::1]:1080"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle socks5 IPv6: %v", err)
+	}
+	if cfg.Socks5.Server != "::1" {
+		t.Errorf("Server = %q, want ::1", cfg.Socks5.Server)
+	}
+	if cfg.Socks5.Port != 1080 {
+		t.Errorf("Port = %d, want 1080", cfg.Socks5.Port)
+	}
+}
+
+func TestParseSocks5_SocksPrefix(t *testing.T) {
+	// socks:// (without 5) should also be detected
+	input := "socks://user:pass@192.0.2.1:1080#SocksPrefix"
+	cfg, err := ParseSingle(input)
+	if err != nil {
+		t.Fatalf("ParseSingle socks prefix: %v", err)
+	}
+	if cfg.Socks5 == nil {
+		t.Fatal("expected Socks5 config from socks:// prefix")
+	}
+	if cfg.Socks5.Name != "SocksPrefix" {
+		t.Errorf("Name = %q", cfg.Socks5.Name)
+	}
+}
+
+func TestParseSocks5_Errors(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"missing host", "socks5://"},
+		{"missing server", "socks5://user:pass@:1080"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseSingle(tt.input)
+			if err == nil {
+				t.Errorf("ParseSingle(%q) expected error", tt.input)
+			}
+		})
+	}
+}
+
+// --- Mixed subscription (all 9 protocols) ---
+
+func TestParse_MixedSubscription_All9Protocols(t *testing.T) {
+	lines := []string{
+		"ss://chacha20-ietf-poly1305:pass@1.1.1.1:8388",
+		"vmess://eyJ2IjogIjIiLCAicHMiOiAiIiwgImFkZCI6ICIyLjIuMi4yIiwgInBvcnQiOiAiNDQzIiwgImlkIjogImExYjJjM2Q0LWU1ZjYtNzg5MC1hYmNkLWVmMTIzNDU2Nzg5MCIsICJhaWQiOiAiMCIsICJzY3kiOiAiYXV0byIsICJuZXQiOiAidGNwIn0=",
+		"vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@3.3.3.3:443?type=tcp",
+		"trojan://password@4.4.4.4:443",
+		"vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@5.5.5.5:443?security=reality&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+		"wireguard://key@6.6.6.6:51820?publicKey=pubkey&address=10.0.0.2/32#WG",
+		"tuic://a1b2c3d4-e5f6-7890-abcd-ef1234567890:pass@7.7.7.7:443#TUIC",
+		"hysteria2://auth@8.8.8.8:443#Hy2",
+		"socks5://user:pass@9.9.9.9:1080#SOCKS5",
+	}
+	input := ""
+	for _, l := range lines {
+		input += l + "\n"
+	}
+	configs, err := Parse(input)
+	if err != nil {
+		t.Fatalf("mixed subscription parse failed: %v", err)
+	}
+	if len(configs) != 9 {
+		t.Fatalf("expected 9 configs, got %d", len(configs))
+	}
+	expected := []models.Protocol{
+		models.ProtocolSS, models.ProtocolVMess, models.ProtocolVLess,
+		models.ProtocolTrojan, models.ProtocolReality,
+		models.ProtocolWireGuard, models.ProtocolTUIC,
+		models.ProtocolHysteria2, models.ProtocolSocks5,
+	}
+	for i, exp := range expected {
+		if configs[i].Protocol() != exp {
+			t.Errorf("config[%d] protocol = %v, want %v", i, configs[i].Protocol(), exp)
+		}
+	}
+}
+
+// --- Round-trip: parse then check Raw field (extended to all protocols) ---
+
+func TestParseRoundTrip_AllProtocols(t *testing.T) {
+	inputs := []string{
+		"ss://chacha20-ietf-poly1305:pass@192.0.2.1:8388#SS-Test",
+		"vless://a1b2c3d4-e5f6-7890-abcd-ef1234567890@example.com:443?type=tcp&security=tls&sni=example.com&fp=firefox#VLess-Test",
+		"trojan://mypassword@tr.example.com:443#Trojan-Test",
+		"wireguard://key@wg.example.com:51820?publicKey=pubkey&address=10.0.0.2/32#WG-Test",
+		"tuic://a1b2c3d4-e5f6-7890-abcd-ef1234567890:pass@tuic.example.com:443#TUIC-Test",
+		"hysteria2://auth@hy2.example.com:443#Hy2-Test",
+		"socks5://user:pass@s5.example.com:1080#Socks5-Test",
+	}
+	for _, raw := range inputs {
+		t.Run(raw[:10], func(t *testing.T) {
+			cfg, err := ParseSingle(raw)
+			if err != nil {
+				t.Fatalf("ParseSingle(%q): %v", raw, err)
+			}
+			if cfg.Raw != raw {
+				t.Errorf("Raw field = %q, want %q", cfg.Raw, raw)
+			}
+		})
+	}
+}

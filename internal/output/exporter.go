@@ -87,6 +87,14 @@ func configToURI(cfg models.ProxyConfig) string {
 		return fmt.Sprintf("trojan://%s@%s:%d#%s", cfg.Trojan.Password, b.Server, b.Port, b.Name)
 	case models.ProtocolReality:
 		return fmt.Sprintf("vless://%s@%s:%d?security=reality&pbk=%s#%s", cfg.Reality.UUID, b.Server, b.Port, cfg.Reality.PublicKey, b.Name)
+	case models.ProtocolWireGuard:
+		return fmt.Sprintf("wireguard://%s@%s:%d?publicKey=%s#%s", cfg.WireGuard.PrivateKey, b.Server, b.Port, cfg.WireGuard.PublicKey, b.Name)
+	case models.ProtocolTUIC:
+		return fmt.Sprintf("tuic://%s:%s@%s:%d?sni=%s#%s", cfg.TUIC.UUID, cfg.TUIC.Password, b.Server, b.Port, cfg.TUIC.SNI, b.Name)
+	case models.ProtocolHysteria2:
+		return fmt.Sprintf("hysteria2://%s@%s:%d?up=%d&down=%d#%s", cfg.Hysteria2.Auth, b.Server, b.Port, cfg.Hysteria2.UpMbps, cfg.Hysteria2.DownMbps, b.Name)
+	case models.ProtocolSocks5:
+		return fmt.Sprintf("socks5://%s:%s@%s:%d#%s", cfg.Socks5.Username, cfg.Socks5.Password, b.Server, b.Port, b.Name)
 	}
 	return ""
 }

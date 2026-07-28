@@ -16,6 +16,10 @@ func TestProtocol_IsValid(t *testing.T) {
 		{ProtocolVLess, true},
 		{ProtocolTrojan, true},
 		{ProtocolReality, true},
+		{ProtocolWireGuard, true},
+		{ProtocolTUIC, true},
+		{ProtocolHysteria2, true},
+		{ProtocolSocks5, true},
 		{Protocol("unknown"), false},
 	}
 	for _, tt := range tests {
@@ -45,6 +49,10 @@ func TestProxyConfig_Protocol(t *testing.T) {
 		{"VLess", ProxyConfig{VLess: &VLessConfig{}}, ProtocolVLess},
 		{"Trojan", ProxyConfig{Trojan: &TrojanConfig{}}, ProtocolTrojan},
 		{"Reality", ProxyConfig{Reality: &RealityConfig{}}, ProtocolReality},
+		{"WireGuard", ProxyConfig{WireGuard: &WireGuardConfig{}}, ProtocolWireGuard},
+		{"TUIC", ProxyConfig{TUIC: &TUICConfig{}}, ProtocolTUIC},
+		{"Hysteria2", ProxyConfig{Hysteria2: &Hysteria2Config{}}, ProtocolHysteria2},
+		{"Socks5", ProxyConfig{Socks5: &Socks5Config{}}, ProtocolSocks5},
 		{"empty", ProxyConfig{}, ""},
 	}
 	for _, tt := range tests {
@@ -67,6 +75,10 @@ func TestProxyConfig_Name(t *testing.T) {
 		{"VLess", ProxyConfig{VLess: &VLessConfig{BaseConfig: BaseConfig{Name: "vless-name"}}}, "vless-name"},
 		{"Trojan", ProxyConfig{Trojan: &TrojanConfig{BaseConfig: BaseConfig{Name: "trojan-name"}}}, "trojan-name"},
 		{"Reality", ProxyConfig{Reality: &RealityConfig{BaseConfig: BaseConfig{Name: "reality-name"}}}, "reality-name"},
+		{"WireGuard", ProxyConfig{WireGuard: &WireGuardConfig{BaseConfig: BaseConfig{Name: "wg-name"}}}, "wg-name"},
+		{"TUIC", ProxyConfig{TUIC: &TUICConfig{BaseConfig: BaseConfig{Name: "tuic-name"}}}, "tuic-name"},
+		{"Hysteria2", ProxyConfig{Hysteria2: &Hysteria2Config{BaseConfig: BaseConfig{Name: "hy2-name"}}}, "hy2-name"},
+		{"Socks5", ProxyConfig{Socks5: &Socks5Config{BaseConfig: BaseConfig{Name: "s5-name"}}}, "s5-name"},
 		{"empty", ProxyConfig{}, ""},
 	}
 	for _, tt := range tests {
@@ -89,6 +101,10 @@ func TestProxyConfig_String(t *testing.T) {
 		{"VLess", ProxyConfig{VLess: &VLessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}, UUID: "abc-uuid"}}, "VLess[1.2.3.4:443"},
 		{"Trojan", ProxyConfig{Trojan: &TrojanConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "Trojan[1.2.3.4:443]"},
 		{"Reality", ProxyConfig{Reality: &RealityConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}, UUID: "abc-uuid"}}, "Reality[1.2.3.4:443"},
+		{"WireGuard", ProxyConfig{WireGuard: &WireGuardConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 51820}}}, "WireGuard[1.2.3.4:51820"},
+		{"TUIC", ProxyConfig{TUIC: &TUICConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "TUIC[1.2.3.4:443"},
+		{"Hysteria2", ProxyConfig{Hysteria2: &Hysteria2Config{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "Hysteria2[1.2.3.4:443"},
+		{"Socks5", ProxyConfig{Socks5: &Socks5Config{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 1080}}}, "Socks5[1.2.3.4:1080"},
 		{"empty", ProxyConfig{}, "empty"},
 	}
 	for _, tt := range tests {
@@ -113,6 +129,10 @@ func TestProxyConfig_Base(t *testing.T) {
 		{"VLess", ProxyConfig{VLess: &VLessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4", 443},
 		{"Trojan", ProxyConfig{Trojan: &TrojanConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4", 443},
 		{"Reality", ProxyConfig{Reality: &RealityConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4", 443},
+		{"WireGuard", ProxyConfig{WireGuard: &WireGuardConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 51820}}}, "1.2.3.4", 51820},
+		{"TUIC", ProxyConfig{TUIC: &TUICConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4", 443},
+		{"Hysteria2", ProxyConfig{Hysteria2: &Hysteria2Config{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4", 443},
+		{"Socks5", ProxyConfig{Socks5: &Socks5Config{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 1080}}}, "1.2.3.4", 1080},
 		{"empty", ProxyConfig{}, "", 0},
 	}
 	for _, tt := range tests {
@@ -136,6 +156,10 @@ func TestProxyConfig_Addr(t *testing.T) {
 		{"VLess", ProxyConfig{VLess: &VLessConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4:443"},
 		{"Trojan", ProxyConfig{Trojan: &TrojanConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4:443"},
 		{"Reality", ProxyConfig{Reality: &RealityConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4:443"},
+		{"WireGuard", ProxyConfig{WireGuard: &WireGuardConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 51820}}}, "1.2.3.4:51820"},
+		{"TUIC", ProxyConfig{TUIC: &TUICConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4:443"},
+		{"Hysteria2", ProxyConfig{Hysteria2: &Hysteria2Config{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}}, "1.2.3.4:443"},
+		{"Socks5", ProxyConfig{Socks5: &Socks5Config{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 1080}}}, "1.2.3.4:1080"},
 		{"empty", ProxyConfig{}, ""},
 	}
 	for _, tt := range tests {
@@ -166,8 +190,24 @@ func TestPerConfigStrings(t *testing.T) {
 		t.Error("TrojanConfig.String() returned empty")
 	}
 	cfg5 := RealityConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}, UUID: "abc"}
+	cfg6 := WireGuardConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 51820}}
+	cfg7 := TUICConfig{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}
+	cfg8 := Hysteria2Config{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 443}}
+	cfg9 := Socks5Config{BaseConfig: BaseConfig{Server: "1.2.3.4", Port: 1080}}
 	if cfg5.String() == "" {
 		t.Error("RealityConfig.String() returned empty")
+	}
+	if cfg6.String() == "" {
+		t.Error("WireGuardConfig.String() returned empty")
+	}
+	if cfg7.String() == "" {
+		t.Error("TUICConfig.String() returned empty")
+	}
+	if cfg8.String() == "" {
+		t.Error("Hysteria2Config.String() returned empty")
+	}
+	if cfg9.String() == "" {
+		t.Error("Socks5Config.String() returned empty")
 	}
 }
 

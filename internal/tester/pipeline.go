@@ -122,6 +122,10 @@ func (p *Pipeline) needsTLS(cfg models.ProxyConfig) bool {
 		return cfg.Trojan.Enabled
 	case cfg.Reality != nil:
 		return true // Reality is always TLS-like
+	case cfg.TUIC != nil:
+		return cfg.TUIC.Enabled
+	case cfg.Hysteria2 != nil:
+		return cfg.Hysteria2.Enabled
 	}
 	return false
 }
@@ -139,6 +143,14 @@ func ConfigPriority(cfg models.ProxyConfig) int {
 	case models.ProtocolTrojan:
 		return 2
 	case models.ProtocolSS:
+		return 1
+	case models.ProtocolHysteria2:
+		return 6
+	case models.ProtocolTUIC:
+		return 5
+	case models.ProtocolWireGuard:
+		return 3
+	case models.ProtocolSocks5:
 		return 1
 	}
 	return 0

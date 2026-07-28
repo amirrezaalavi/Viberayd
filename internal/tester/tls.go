@@ -128,6 +128,18 @@ func TestTLSForConfig(ctx context.Context, cfg models.ProxyConfig, timeout time.
 		skipVerify = cfg.Reality.SkipVerify
 		fp = cfg.Reality.Fingerprint
 		enabled = true // Reality is always TLS-like
+	case cfg.TUIC != nil:
+		sni = cfg.TUIC.SNI
+		skipVerify = cfg.TUIC.SkipVerify
+		fp = cfg.TUIC.Fingerprint
+		enabled = cfg.TUIC.Enabled
+	case cfg.Hysteria2 != nil:
+		sni = cfg.Hysteria2.SNI
+		skipVerify = cfg.Hysteria2.SkipVerify
+		fp = cfg.Hysteria2.Fingerprint
+		enabled = cfg.Hysteria2.Enabled
+	case cfg.WireGuard != nil, cfg.Socks5 != nil:
+		return TLSResult{Success: false, Error: "TLS not applicable for this protocol"}
 	default:
 		return TLSResult{Success: false, Error: "no TLS config in proxy"}
 	}

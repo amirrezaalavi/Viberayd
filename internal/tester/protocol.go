@@ -41,6 +41,14 @@ func TestProtocol(ctx context.Context, cfg models.ProxyConfig, timeout time.Dura
 		res = testTrojanProtocol(ctx, cfg.Trojan, timeout)
 	case models.ProtocolReality:
 		res = testRealityProtocol(ctx, cfg.Reality, timeout)
+	case models.ProtocolWireGuard:
+		res = testWireGuardProtocol(ctx, cfg.WireGuard, timeout)
+	case models.ProtocolTUIC:
+		res = testTUICProtocol(ctx, cfg.TUIC, timeout)
+	case models.ProtocolHysteria2:
+		res = testHysteria2Protocol(ctx, cfg.Hysteria2, timeout)
+	case models.ProtocolSocks5:
+		res = testSocks5Protocol(ctx, cfg.Socks5, timeout)
 	default:
 		res = ProtocolResult{Success: false, Error: "unknown protocol for handshake test"}
 	}
@@ -170,4 +178,75 @@ func testRealityProtocol(ctx context.Context, cfg *models.RealityConfig, timeout
 		Success: true,
 		Info:    fmt.Sprintf("pk verified tls=%s", tlsRes.Version),
 	}
+}
+
+
+func testWireGuardProtocol(ctx context.Context, cfg *models.WireGuardConfig, timeout time.Duration) ProtocolResult {
+	if cfg == nil {
+		return ProtocolResult{Success: false, Error: "nil WireGuard config"}
+	}
+	if cfg.PrivateKey == "" {
+		return ProtocolResult{Success: false, Error: "missing WireGuard private key"}
+	}
+	if cfg.PublicKey == "" {
+		return ProtocolResult{Success: false, Error: "missing WireGuard public key"}
+	}
+	tcp := TestTCP(ctx, cfg.Addr(), timeout)
+	if !tcp.Success {
+		return ProtocolResult{Success: false, Error: tcp.Error}
+	}
+	return ProtocolResult{Success: true, Info: "wireguard endpoint reachable"}
+}
+
+func testTUICProtocol(ctx context.Context, cfg *models.TUICConfig, timeout time.Duration) ProtocolResult {
+	if cfg == nil {
+		return ProtocolResult{Success: false, Error: "nil TUIC config"}
+	}
+	if cfg.UUID == "" {
+		return ProtocolResult{Success: false, Error: "missing TUIC UUID"}
+	}
+	tcp := TestTCP(ctx, cfg.Addr(), timeout)
+	if !tcp.Success {
+		return ProtocolResult{Success: false, Error: tcp.Error}
+	}
+	tlsRes := TestTLS(ctx, cfg.Addr(), cfg.SNI, cfg.SkipVerify, cfg.Fingerprint, timeout)
+	if !tlsRes.Success {
+		return ProtocolResult{
+			Success: false,
+			Error:   fmt.Sprintf("tuic destination not TLS-capable: %s", tlsRes.Error),
+		}
+	}
+	return ProtocolResult{Success: true, Info: fmt.Sprintf("cc=%s udp=%s", cfg.CongestionControl, cfg.UDPRelayMode)}
+}
+
+func testHysteria2Protocol(ctx context.Context, cfg *models.Hysteria2Config, timeout time.Duration) ProtocolResult {
+	if cfg == nil {
+		return ProtocolResult{Success: false, Error: "nil Hysteria2 config"}
+	}
+	if cfg.Auth == "" {
+		return ProtocolResult{Success: false, Error: "missing Hysteria2 auth"}
+	}
+	tcp := TestTCP(ctx, cfg.Addr(), timeout)
+	if !tcp.Success {
+		return ProtocolResult{Success: false, Error: tcp.Error}
+	}
+	tlsRes := TestTLS(ctx, cfg.Addr(), cfg.SNI, cfg.SkipVerify, cfg.Fingerprint, timeout)
+	if !tlsRes.Success {
+		return ProtocolResult{
+			Success: false,
+			Error:   fmt.Sprintf("hysteria2 destination not TLS-capable: %s", tlsRes.Error),
+		}
+	}
+	return ProtocolResult{Success: true, Info: fmt.Sprintf("up=%d down=%d", cfg.UpMbps, cfg.DownMbps)}
+}
+
+func testSocks5Protocol(ctx context.Context, cfg *models.Socks5Config, timeout time.Duration) ProtocolResult {
+	if cfg == nil {
+		return ProtocolResult{Success: false, Error: "nil Socks5 config"}
+	}
+	tcp := TestTCP(ctx, cfg.Addr(), timeout)
+	if !tcp.Success {
+		return ProtocolResult{Success: false, Error: tcp.Error}
+	}
+	return ProtocolResult{Success: true, Info: fmt.Sprintf("auth=%v", cfg.Username != "")}
 }

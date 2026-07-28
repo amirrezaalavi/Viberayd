@@ -1,0 +1,1 @@
+tuic://a1b2c3d4-e5f6-7890-abcd-ef1234567890:mypassword@192.0.2.1:443?sni=example.com&congestion_control=bbr&udp_relay_mode=native&alpn=h3&reduce_rtt=1#MyTUICServer

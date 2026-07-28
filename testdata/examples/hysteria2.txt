@@ -1,0 +1,1 @@
+hysteria2://myauth@192.0.2.1:443?obfs=salamander&obfs-password=obfspass&up=100&down=200&sni=example.com&alpn=h3&insecure=1#MyHysteria2Server

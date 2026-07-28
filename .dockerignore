@@ -1,0 +1,7 @@
+build/
+.git/
+*.md
+testdata/
+test.txt
+not-working.txt
+working.txt

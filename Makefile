@@ -1,8 +1,8 @@
-BINARY_NAME=viberay
-CMD_PATH=./cmd/viberay
+BINARY_NAME=viberayd
+CMD_PATH=./cmd/viberayd
 BUILD_DIR=./build
 
-.PHONY: all build clean test lint fmt vet run
+.PHONY: all build clean test lint fmt vet run docker-build docker-run
 
 all: build
 
@@ -57,3 +57,17 @@ build-mac:
 
 build-windows:
 	GOOS=windows GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(CMD_PATH)
+
+# Docker
+docker-build:
+	@echo "Building Docker image..."
+	docker build -t viberayd:latest .
+
+docker-run:
+	@echo "Running container (mount ./data to /work)..."
+	@mkdir -p data
+	docker run --rm -it \
+		-v "$(PWD)/data:/work" \
+		-p 8080:8080 \
+		-p 8081:8081 \
+		viberayd:latest

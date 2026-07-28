@@ -36,6 +36,13 @@ Thumbs.db
 # Build output
 /build/
 
+# Runtime data files
+*.txt
+*.example
+working.txt
+not-working.txt
+state.json
+
 # Temporary files
 *.tmp
 *.temp

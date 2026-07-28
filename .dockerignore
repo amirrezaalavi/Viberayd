@@ -1,7 +1,6 @@
 build/
 .git/
 *.md
+*.txt
+*.example
 testdata/
-test.txt
-not-working.txt
-working.txt

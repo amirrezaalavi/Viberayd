@@ -54,33 +54,10 @@ This produces a single binary at `build/viberayd` (or `build/viberayd.exe` on Wi
 echo "https://example.com/sub.txt" > urls.txt
 ```
 
-### 2. Create a config file
-
-```toml
-version = 1
-
-[daemon]
-urls_file = "urls.txt"
-output_file = "working.txt"
-state_file = "state.json"
-cycle_sleep = 300
-parallel = 5
-timeout = 10
-depth = "standard"
-keep_successful = true
-retest_interval = 1800
-
-[http]
-enabled = true
-port = 8080
-sub_path = "/sub"
-api_port = 8081
-```
-
-### 3. Run the daemon
+### 2. Run the daemon
 
 ```bash
-./build/viberayd -config config.toml
+DAEMON_URLS_FILE=urls.txt DAEMON_OUTPUT_FILE=working.txt ./build/viberayd
 ```
 
 ### 4. Import the subscription in your client
@@ -104,17 +81,18 @@ The image includes xray-core v26.7.11 for comprehensive tests.
 
 ```bash
 mkdir -p data
-cp config.toml data/config.toml
 echo "https://your-subscription-url/sub" > data/urls.txt
 
 docker run --rm -it \
+  -e DAEMON_URLS_FILE=/work/urls.txt \
+  -e DAEMON_OUTPUT_FILE=/work/working.txt \
   -v "$(pwd)/data:/work" \
   -p 8080:8080 \
   -p 8081:8081 \
   viberayd:latest
 ```
 
-- Mounts `./data` to `/work` — config.toml, urls.txt, state.json, working.txt all live here and persist across restarts
+- Mounts `./data` to `/work` — urls.txt, state.json, working.txt all live here and persist across restarts
 - Port 8080: subscription endpoint
 - Port 8081: management API
 
@@ -135,24 +113,23 @@ services:
 
 ## Configuration
 
-### `config.toml`
+All config via environment variables:
 
-| Field | Default | Description |
+| Variable | Default | Description |
 |---|---|---|
-| `version` | `1` | Config file version |
-| `urls_file` | `"urls.txt"` | File with subscription URLs (one per line, `#` for comments) |
-| `output_file` | `"working.txt"` | Working configs written here each cycle |
-| `state_file` | `"state.json"` | Persisted state across restarts |
-| `cycle_sleep` | `300` | Seconds between cycles (min 10) |
-| `parallel` | `10` | Concurrent Xray tests (1–20, clamped) |
-| `timeout` | `10` | Per-test timeout in seconds |
-| `depth` | `"standard"` | Test depth: `quick`, `standard`, `full`, `comprehensive` |
-| `keep_successful` | `true` | Re-test working configs on subsequent cycles |
-| `retest_interval` | `1800` | Seconds before re-testing a working config |
-| `http.enabled` | `false` | Enable HTTP subscription + API server |
-| `http.port` | `8080` | Subscription endpoint port |
-| `http.sub_path` | `"/sub"` | Path for subscription endpoint |
-| `http.api_port` | `8081` | Management API port |
+| `DAEMON_URLS_FILE` | `"urls.txt"` | File with subscription URLs (one per line, `#` for comments) |
+| `DAEMON_OUTPUT_FILE` | `"working.txt"` | Working configs written here each cycle |
+| `DAEMON_STATE_FILE` | `"state.json"` | Persisted state across restarts |
+| `DAEMON_CYCLE_SLEEP` | `300` | Seconds between cycles (min 10) |
+| `DAEMON_PARALLEL` | `10` | Concurrent Xray tests (1–20, clamped) |
+| `DAEMON_TIMEOUT` | `10` | Per-test timeout in seconds |
+| `DAEMON_DEPTH` | `"standard"` | Test depth: `quick`, `standard`, `full`, `comprehensive` |
+| `DAEMON_KEEP_SUCCESSFUL` | `true` | Re-test working configs on subsequent cycles |
+| `DAEMON_RETEST_INTERVAL` | `1800` | Seconds before re-testing a working config |
+| `HTTP_ENABLED` | `false` | Enable HTTP subscription + API server |
+| `HTTP_PORT` | `8080` | Subscription endpoint port |
+| `HTTP_SUB_PATH` | `"/sub"` | Path for subscription endpoint |
+| `HTTP_API_PORT` | `8081` | Management API port |
 
 ---
 
@@ -160,16 +137,15 @@ services:
 
 | Flag | Default | Description |
 |---|---|---|
-| `-config` | `"config.toml"` | Path to config file |
 | `-once` | `false` | Run a single test cycle and exit |
 
-Example: `./viberayd -config myconfig.toml -once`
+Example: `DAEMON_URLS_FILE=urls.txt ./viberayd -once`
 
 ---
 
 ## HTTP API
 
-When `http.enabled = true`, two HTTP servers start:
+When `HTTP_ENABLED=true`, two HTTP servers start:
 
 ### Subscription endpoint (`:8080`)
 
@@ -205,7 +181,7 @@ When `http.enabled = true`, two HTTP servers start:
 ## Architecture
 
 ```
-Daemon loop (every cycle_sleep seconds):
+Daemon loop (every DAEMON_CYCLE_SLEEP seconds):
   urls.txt
     → HTTP fetch each subscription URL
     → Parse sharelinks (base64 or plain)

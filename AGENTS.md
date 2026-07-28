@@ -85,7 +85,7 @@ failed  → (next cycle)  → working | failed | unreachable
 
 | Function | File | What it does |
 |---|---|---|
-| `LoadConfig(path)` | `config.go` | Parse TOML, apply defaults, clamp parallel 1-20 |
+| `LoadConfigFromEnv()` | `config.go` | Parse env vars, apply defaults, clamp parallel 1-20 |
 | `NewState()` | `state.go` | Empty state with version=1 |
 | `LoadState(path)` | `state.go` | Read state.json, return empty if missing |
 | `SaveState(path, s)` | `state.go` | Atomic write (tmp + rename) |
@@ -120,33 +120,29 @@ failed  → (next cycle)  → working | failed | unreachable
 3. Add test in `http_test.go` with `httptest.NewRecorder`
 4. If it accesses state, use `StateMu.RLock()`/`RUnlock()`
 
-## Changing the Config File Format
+## Changing Config
 
 1. Update `Config`/`DaemonConfig`/`HTTPConfig` structs in `config.go`
 2. Update `DefaultConfig()` defaults
-3. Update `applyDefaults()` and `validate()` if needed
-4. Update `config.toml.example`
-5. Update tests in `config_test.go`
+3. Update `LoadConfigFromEnv()` and `validate()` if needed
+4. Update tests in `config_test.go`
 
 ---
 
 ## Daemon config reference
 
-```toml
-version = 1
-[daemon]
-urls_file = "urls.txt"         # one subscription URL per line
-output_file = "working.txt"    # overwritten each cycle: <raw-uri> <latency-ms>
-state_file = "state.json"      # persisted config state
-cycle_sleep = 300              # seconds between cycles (min 10, default 300)
-parallel = 10                  # concurrent xray tests (1-20, default 10)
-timeout = 10                   # per-test timeout in seconds (min 1, default 10)
-depth = "standard"             # quick | standard | full | comprehensive
-keep_successful = true         # re-test working configs
-retest_interval = 1800         # seconds before re-testing a working config
-[http]
-enabled = false                # enable HTTP servers
-port = 8080                    # subscription endpoint port
-sub_path = "/sub"              # GET /sub returns base64 of working.txt
-api_port = 8081                # management API port
+```
+DAEMON_URLS_FILE=urls.txt         # one subscription URL per line
+DAEMON_OUTPUT_FILE=working.txt    # overwritten each cycle: <raw-uri> <latency-ms>
+DAEMON_STATE_FILE=state.json      # persisted config state
+DAEMON_CYCLE_SLEEP=300            # seconds between cycles (min 10, default 300)
+DAEMON_PARALLEL=10                # concurrent xray tests (1-20, default 10)
+DAEMON_TIMEOUT=10                 # per-test timeout in seconds (min 1, default 10)
+DAEMON_DEPTH=standard             # quick | standard | full | comprehensive
+DAEMON_KEEP_SUCCESSFUL=true       # re-test working configs
+DAEMON_RETEST_INTERVAL=1800       # seconds before re-testing a working config
+HTTP_ENABLED=false                # enable HTTP servers
+HTTP_PORT=8080                    # subscription endpoint port
+HTTP_SUB_PATH=/sub                # GET /sub returns base64 of working.txt
+HTTP_API_PORT=8081                # management API port
 ```

@@ -4,35 +4,35 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/amirrezaalavi/Viberay/internal/models"
 )
 
 type Config struct {
-	Version int          `toml:"version"`
-	Daemon  DaemonConfig `toml:"daemon"`
-	HTTP    HTTPConfig   `toml:"http"`
+	Version int
+	Daemon  DaemonConfig
+	HTTP    HTTPConfig
 }
 
 type DaemonConfig struct {
-	URLsFile         string `toml:"urls_file"`
-	OutputFile       string `toml:"output_file"`
-	StateFile        string `toml:"state_file"`
-	CycleSleepSec    int    `toml:"cycle_sleep"`
-	Parallel         int    `toml:"parallel"`
-	TimeoutSec       int    `toml:"timeout"`
-	Depth            string `toml:"depth"`
-	KeepSuccessful   bool   `toml:"keep_successful"`
-	RetestIntervalSec int   `toml:"retest_interval"`
+	URLsFile          string
+	OutputFile        string
+	StateFile         string
+	CycleSleepSec     int
+	Parallel          int
+	TimeoutSec        int
+	Depth             string
+	KeepSuccessful    bool
+	RetestIntervalSec int
 }
 
 type HTTPConfig struct {
-	Enabled bool   `toml:"enabled"`
-	Port    int    `toml:"port"`
-	SubPath string `toml:"sub_path"`
-	APIPort int    `toml:"api_port"`
+	Enabled bool
+	Port    int
+	SubPath string
+	APIPort int
 }
 
 func DefaultConfig() Config {
@@ -58,65 +58,71 @@ func DefaultConfig() Config {
 	}
 }
 
-func LoadConfig(path string) (Config, error) {
-	cfg := DefaultConfig()
-
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return cfg, fmt.Errorf("config file not found: %s", path)
+func env(key, def string) string {
+	if v, ok := os.LookupEnv(key); ok {
+		return v
 	}
-
-	md, err := toml.DecodeFile(path, &cfg)
-	if err != nil {
-		return cfg, fmt.Errorf("decode config: %w", err)
-	}
-
-	undecoded := md.Undecoded()
-	if len(undecoded) > 0 {
-		slog.Warn("unknown config keys", "keys", undecoded)
-	}
-
-	applyDefaults(&cfg)
-	validate(&cfg)
-
-	return cfg, nil
+	return def
 }
 
-func applyDefaults(cfg *Config) {
-	d := DefaultConfig()
+func LoadConfigFromEnv() Config {
+	cfg := DefaultConfig()
 
-	if cfg.Daemon.URLsFile == "" {
-		cfg.Daemon.URLsFile = d.Daemon.URLsFile
+	cfg.Daemon.URLsFile = env("DAEMON_URLS_FILE", cfg.Daemon.URLsFile)
+	cfg.Daemon.OutputFile = env("DAEMON_OUTPUT_FILE", cfg.Daemon.OutputFile)
+	cfg.Daemon.StateFile = env("DAEMON_STATE_FILE", cfg.Daemon.StateFile)
+
+	if v, ok := os.LookupEnv("DAEMON_CYCLE_SLEEP"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.CycleSleepSec = n
+		}
 	}
-	if cfg.Daemon.OutputFile == "" {
-		cfg.Daemon.OutputFile = d.Daemon.OutputFile
+
+	if v, ok := os.LookupEnv("DAEMON_PARALLEL"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.Parallel = n
+		}
 	}
-	if cfg.Daemon.StateFile == "" {
-		cfg.Daemon.StateFile = d.Daemon.StateFile
+
+	if v, ok := os.LookupEnv("DAEMON_TIMEOUT"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.TimeoutSec = n
+		}
 	}
-	if cfg.Daemon.CycleSleepSec == 0 {
-		cfg.Daemon.CycleSleepSec = d.Daemon.CycleSleepSec
+
+	cfg.Daemon.Depth = env("DAEMON_DEPTH", cfg.Daemon.Depth)
+
+	if v, ok := os.LookupEnv("DAEMON_KEEP_SUCCESSFUL"); ok {
+		cfg.Daemon.KeepSuccessful = v == "true" || v == "1" || v == "yes"
 	}
-	if cfg.Daemon.Parallel == 0 {
-		cfg.Daemon.Parallel = d.Daemon.Parallel
+
+	if v, ok := os.LookupEnv("DAEMON_RETEST_INTERVAL"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.RetestIntervalSec = n
+		}
 	}
-	if cfg.Daemon.TimeoutSec == 0 {
-		cfg.Daemon.TimeoutSec = d.Daemon.TimeoutSec
+
+	if v, ok := os.LookupEnv("HTTP_ENABLED"); ok {
+		cfg.HTTP.Enabled = v == "true" || v == "1" || v == "yes"
 	}
-	if cfg.Daemon.Depth == "" {
-		cfg.Daemon.Depth = d.Daemon.Depth
+
+	if v, ok := os.LookupEnv("HTTP_PORT"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.HTTP.Port = n
+		}
 	}
-	if cfg.Daemon.RetestIntervalSec == 0 {
-		cfg.Daemon.RetestIntervalSec = d.Daemon.RetestIntervalSec
+
+	cfg.HTTP.SubPath = env("HTTP_SUB_PATH", cfg.HTTP.SubPath)
+
+	if v, ok := os.LookupEnv("HTTP_API_PORT"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.HTTP.APIPort = n
+		}
 	}
-	if cfg.HTTP.Port == 0 {
-		cfg.HTTP.Port = d.HTTP.Port
-	}
-	if cfg.HTTP.SubPath == "" {
-		cfg.HTTP.SubPath = d.HTTP.SubPath
-	}
-	if cfg.HTTP.APIPort == 0 {
-		cfg.HTTP.APIPort = d.HTTP.APIPort
-	}
+
+	validate(&cfg)
+
+	return cfg
 }
 
 func validate(cfg *Config) {

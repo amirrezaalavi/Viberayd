@@ -11,7 +11,6 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "config.toml", "path to configuration file")
 	singleCycle := flag.Bool("once", false, "run a single cycle and exit")
 	flag.Parse()
 
@@ -19,14 +18,9 @@ func main() {
 	logLevel.Set(slog.LevelInfo)
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})))
 
-	cfg, err := daemon.LoadConfig(*configPath)
-	if err != nil {
-		slog.Error("failed to load config", "error", err)
-		os.Exit(1)
-	}
+	cfg := daemon.LoadConfigFromEnv()
 
 	fmt.Println("viberayd starting...")
-	fmt.Printf("  config: %s\n", *configPath)
 	fmt.Printf("  daemon: urls=%s output=%s state=%s sleep=%ds parallel=%d timeout=%ds depth=%s keep_ok=%v retest=%ds\n",
 		cfg.Daemon.URLsFile,
 		cfg.Daemon.OutputFile,

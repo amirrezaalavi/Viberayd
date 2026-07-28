@@ -2,12 +2,44 @@ package daemon
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 )
 
+func setenv(t *testing.T, key, value string) {
+	t.Helper()
+	orig, ok := os.LookupEnv(key)
+	os.Setenv(key, value)
+	t.Cleanup(func() {
+		if ok {
+			os.Setenv(key, orig)
+		} else {
+			os.Unsetenv(key)
+		}
+	})
+}
+
+func unsetenv(t *testing.T, key string) {
+	t.Helper()
+	orig, ok := os.LookupEnv(key)
+	os.Unsetenv(key)
+	t.Cleanup(func() {
+		if ok {
+			os.Setenv(key, orig)
+		}
+	})
+}
+
 func TestDefaultConfig(t *testing.T) {
-	cfg := DefaultConfig()
+	for _, key := range []string{
+		"DAEMON_URLS_FILE", "DAEMON_OUTPUT_FILE", "DAEMON_STATE_FILE",
+		"DAEMON_CYCLE_SLEEP", "DAEMON_PARALLEL", "DAEMON_TIMEOUT",
+		"DAEMON_DEPTH", "DAEMON_KEEP_SUCCESSFUL", "DAEMON_RETEST_INTERVAL",
+		"HTTP_ENABLED", "HTTP_PORT", "HTTP_SUB_PATH", "HTTP_API_PORT",
+	} {
+		unsetenv(t, key)
+	}
+
+	cfg := LoadConfigFromEnv()
 
 	if cfg.Version != 1 {
 		t.Errorf("Version = %d, want 1", cfg.Version)
@@ -54,33 +86,21 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestLoadConfigFull(t *testing.T) {
-	content := `
-version = 1
+	setenv(t, "DAEMON_URLS_FILE", "my_urls.txt")
+	setenv(t, "DAEMON_OUTPUT_FILE", "my_working.txt")
+	setenv(t, "DAEMON_STATE_FILE", "my_state.json")
+	setenv(t, "DAEMON_CYCLE_SLEEP", "60")
+	setenv(t, "DAEMON_PARALLEL", "5")
+	setenv(t, "DAEMON_TIMEOUT", "15")
+	setenv(t, "DAEMON_DEPTH", "comprehensive")
+	setenv(t, "DAEMON_KEEP_SUCCESSFUL", "false")
+	setenv(t, "DAEMON_RETEST_INTERVAL", "3600")
+	setenv(t, "HTTP_ENABLED", "true")
+	setenv(t, "HTTP_PORT", "9090")
+	setenv(t, "HTTP_SUB_PATH", "/my_sub")
+	setenv(t, "HTTP_API_PORT", "9091")
 
-[daemon]
-urls_file = "my_urls.txt"
-output_file = "my_working.txt"
-state_file = "my_state.json"
-cycle_sleep = 60
-parallel = 5
-timeout = 15
-depth = "comprehensive"
-keep_successful = false
-retest_interval = 3600
-
-[http]
-enabled = true
-port = 9090
-sub_path = "/my_sub"
-api_port = 9091
-`
-	path := writeTempFile(t, content)
-	defer os.Remove(path)
-
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	cfg := LoadConfigFromEnv()
 
 	if cfg.Daemon.URLsFile != "my_urls.txt" {
 		t.Errorf("URLsFile = %q, want my_urls.txt", cfg.Daemon.URLsFile)
@@ -124,20 +144,10 @@ api_port = 9091
 }
 
 func TestLoadConfigPartial(t *testing.T) {
-	content := `
-version = 1
+	setenv(t, "DAEMON_PARALLEL", "3")
+	setenv(t, "DAEMON_TIMEOUT", "5")
 
-[daemon]
-parallel = 3
-timeout = 5
-`
-	path := writeTempFile(t, content)
-	defer os.Remove(path)
-
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	cfg := LoadConfigFromEnv()
 
 	if cfg.Daemon.Parallel != 3 {
 		t.Errorf("Parallel = %d, want 3", cfg.Daemon.Parallel)
@@ -157,42 +167,10 @@ timeout = 5
 	}
 }
 
-func TestLoadConfigMissingFile(t *testing.T) {
-	_, err := LoadConfig("does_not_exist.toml")
-	if err == nil {
-		t.Fatal("expected error for missing file, got nil")
-	}
-}
-
-func TestLoadConfigEmptyFile(t *testing.T) {
-	path := writeTempFile(t, "")
-	defer os.Remove(path)
-
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-
-	if cfg.Version != 1 {
-		t.Errorf("Version = %d, want 1", cfg.Version)
-	}
-	if cfg.Daemon.Parallel != 10 {
-		t.Errorf("Parallel = %d, want default 10", cfg.Daemon.Parallel)
-	}
-}
-
 func TestParallelClampLow(t *testing.T) {
-	content := `[daemon]
-parallel = -5
-timeout = 10
-`
-	path := writeTempFile(t, content)
-	defer os.Remove(path)
+	setenv(t, "DAEMON_PARALLEL", "-5")
 
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	cfg := LoadConfigFromEnv()
 
 	if cfg.Daemon.Parallel != 1 {
 		t.Errorf("Parallel = %d, want 1 (clamped)", cfg.Daemon.Parallel)
@@ -200,17 +178,9 @@ timeout = 10
 }
 
 func TestParallelClampHigh(t *testing.T) {
-	content := `[daemon]
-parallel = 100
-timeout = 10
-`
-	path := writeTempFile(t, content)
-	defer os.Remove(path)
+	setenv(t, "DAEMON_PARALLEL", "100")
 
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	cfg := LoadConfigFromEnv()
 
 	if cfg.Daemon.Parallel != 20 {
 		t.Errorf("Parallel = %d, want 20 (clamped)", cfg.Daemon.Parallel)
@@ -218,16 +188,9 @@ timeout = 10
 }
 
 func TestTimeoutClampLow(t *testing.T) {
-	content := `[daemon]
-timeout = 0
-`
-	path := writeTempFile(t, content)
-	defer os.Remove(path)
+	setenv(t, "DAEMON_TIMEOUT", "0")
 
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	cfg := LoadConfigFromEnv()
 
 	if cfg.Daemon.TimeoutSec < 1 {
 		t.Errorf("TimeoutSec = %d, want at least 1", cfg.Daemon.TimeoutSec)
@@ -235,16 +198,9 @@ timeout = 0
 }
 
 func TestCycleSleepClampLow(t *testing.T) {
-	content := `[daemon]
-cycle_sleep = 1
-`
-	path := writeTempFile(t, content)
-	defer os.Remove(path)
+	setenv(t, "DAEMON_CYCLE_SLEEP", "1")
 
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	cfg := LoadConfigFromEnv()
 
 	if cfg.Daemon.CycleSleepSec < 10 {
 		t.Errorf("CycleSleepSec = %d, want at least 10", cfg.Daemon.CycleSleepSec)
@@ -252,16 +208,9 @@ cycle_sleep = 1
 }
 
 func TestInvalidDepth(t *testing.T) {
-	content := `[daemon]
-depth = "ultra"
-`
-	path := writeTempFile(t, content)
-	defer os.Remove(path)
+	setenv(t, "DAEMON_DEPTH", "ultra")
 
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+	cfg := LoadConfigFromEnv()
 
 	if cfg.Daemon.Depth != "standard" {
 		t.Errorf("Depth = %q, want standard (fallback)", cfg.Daemon.Depth)
@@ -304,12 +253,4 @@ func TestConfigString(t *testing.T) {
 	}
 }
 
-func writeTempFile(t *testing.T, content string) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		t.Fatalf("write temp file: %v", err)
-	}
-	return path
-}
+

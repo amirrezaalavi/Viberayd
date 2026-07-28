@@ -1,5 +1,8 @@
 # Viberay Daemon
 
+> **Status:** Complete. This project is read-only.  
+> Next: [Viberoxy](https://github.com/amirrezaalavi/viberoxy) — proxy aggregation server built on top of Viberayd.
+
 A long-running daemon that fetches proxy subscription URLs, tests each config (TCP → Xray), and serves the working ones as a subscription endpoint.
 
 - **Supported protocols:** Shadowsocks, VMess, VLESS, Trojan, Reality

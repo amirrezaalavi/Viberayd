@@ -1,35 +1,32 @@
-# Stage 1: Build the VibeRay binary
+# Stage 1: Build viberayd
 FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
 
-# Cache dependencies in a separate layer (go.sum only present when there are external deps)
-COPY go.mod go.sum* ./
-RUN go mod download
+COPY go.mod ./
+RUN go mod download 2>/dev/null || true
 
-# Copy the rest of the source code and build
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/viberay ./cmd/viberay
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/viberayd ./cmd/viberayd
 
-# Stage 2: Minimal runtime image
+# Stage 2: Runtime
 FROM alpine:3.20 AS runtime
 
-# Install runtime dependencies
 RUN apk add --no-cache ca-certificates wget unzip
 
-# Download the official Xray binary (pinned to v26.7.11)
 RUN wget -qO /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/v26.7.11/Xray-linux-64.zip && \
     unzip -j /tmp/xray.zip xray -d /usr/local/bin/ && \
     chmod +x /usr/local/bin/xray && \
     rm /tmp/xray.zip
 
-# Copy the built VibeRay binary from the builder stage
-COPY --from=builder /out/viberay /usr/local/bin/viberay
+COPY --from=builder /out/viberayd /usr/local/bin/viberayd
 
-# Run as non-root user
 USER nobody:nobody
 
 WORKDIR /work
 
-ENTRYPOINT ["/usr/local/bin/viberay"]
-CMD ["-help"]
+EXPOSE 8080 8081
+
+ENTRYPOINT ["/usr/local/bin/viberayd"]
+
+CMD ["-config", "/work/config.toml"]

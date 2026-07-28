@@ -16,6 +16,7 @@ A long-running daemon that fetches proxy subscription URLs, tests each config (T
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Docker](#docker)
 - [Configuration](#configuration)
 - [CLI Flags](#cli-flags)
 - [HTTP API](#http-api)
@@ -85,6 +86,50 @@ api_port = 8081
 ### 4. Import the subscription in your client
 
 Use `http://localhost:8080/sub` as a subscription URL in Xray, V2RayNG, Clash, etc.
+
+---
+
+## Docker
+
+### Build the image
+
+```bash
+docker build -t viberayd:latest .
+# or: make docker-build
+```
+
+The image includes xray-core v26.7.11 for comprehensive tests.
+
+### Run the container
+
+```bash
+mkdir -p data
+cp config.toml data/config.toml
+echo "https://your-subscription-url/sub" > data/urls.txt
+
+docker run --rm -it \
+  -v "$(pwd)/data:/work" \
+  -p 8080:8080 \
+  -p 8081:8081 \
+  viberayd:latest
+```
+
+- Mounts `./data` to `/work` — config.toml, urls.txt, state.json, working.txt all live here and persist across restarts
+- Port 8080: subscription endpoint
+- Port 8081: management API
+
+### With docker-compose
+
+```yaml
+services:
+  viberayd:
+    build: .
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    volumes:
+      - ./data:/work
+```
 
 ---
 

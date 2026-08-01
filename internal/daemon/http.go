@@ -46,6 +46,7 @@ func (d *Daemon) StartHTTPServers() error {
 	apiMux.HandleFunc("/api/stats", hs.handleStats)
 	apiMux.HandleFunc("/api/cycle/trigger", hs.handleCycleTrigger)
 	apiMux.HandleFunc("/api/configs", hs.handleConfigs)
+	apiMux.HandleFunc("/metrics", hs.handleMetrics)
 
 	apiAddr := fmt.Sprintf(":%d", d.Config.HTTP.APIPort)
 	hs.apiSrv = &http.Server{

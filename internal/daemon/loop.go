@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -225,11 +227,40 @@ func (d *Daemon) writeOutputFile() {
 		}
 		lines = append(lines, line)
 	}
+	// Sort ascending by latency (best/fastest configs first) so consumers of
+	// the subscription get the most reliable configs up front. Map iteration
+	// order is random; without this the /sub output order is nondeterministic.
+	sort.SliceStable(lines, func(i, j int) bool {
+		li, lj := parseLatencyMs(lines[i]), parseLatencyMs(lines[j])
+		if li == lj {
+			return lines[i] < lines[j]
+		}
+		return li < lj
+	})
 	data := strings.Join(lines, "\n")
 	if len(lines) > 0 {
 		data += "\n"
 	}
 	os.WriteFile(path, []byte(data), 0644)
+}
+
+// parseLatencyMs extracts the trailing "NNNms" latency annotation from a
+// working.txt line. Lines without an annotation are treated as +inf so they
+// sort after all measured configs.
+func parseLatencyMs(line string) int {
+	idx := strings.LastIndex(line, " ")
+	if idx < 0 {
+		return int(^uint(0) >> 1)
+	}
+	s := line[idx+1:]
+	if !strings.HasSuffix(s, "ms") {
+		return int(^uint(0) >> 1)
+	}
+	n, err := strconv.Atoi(strings.TrimSuffix(s, "ms"))
+	if err != nil {
+		return int(^uint(0) >> 1)
+	}
+	return n
 }
 
 func (d *Daemon) shutdown() error {

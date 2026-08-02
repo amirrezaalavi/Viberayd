@@ -164,6 +164,7 @@ When `HTTP_ENABLED=true`, two HTTP servers start:
 | `GET` | `/api/stats` | Counts: total, working, failed, unreachable |
 | `POST` | `/api/cycle/trigger` | Force immediate test cycle |
 | `GET` | `/api/configs?page=1&per_page=50` | Paginated config list with states |
+| `GET` | `/metrics` | Prometheus-format metrics: `viberayd_configs_total{state}`, `viberayd_build_info` (additive; for Grafana/Prometheus) |
 
 ---
 

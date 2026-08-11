@@ -26,6 +26,7 @@ type DaemonConfig struct {
 	Depth             string
 	KeepSuccessful    bool
 	RetestIntervalSec int
+	MaxLatencyMs      int
 }
 
 type HTTPConfig struct {
@@ -102,6 +103,12 @@ func LoadConfigFromEnv() Config {
 		}
 	}
 
+	if v, ok := os.LookupEnv("DAEMON_MAX_LATENCY_MS"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.MaxLatencyMs = n
+		}
+	}
+
 	if v, ok := os.LookupEnv("HTTP_ENABLED"); ok {
 		cfg.HTTP.Enabled = v == "true" || v == "1" || v == "yes"
 	}
@@ -142,6 +149,10 @@ func validate(cfg *Config) {
 		slog.Warn("cycle_sleep too low, setting to 10", "provided", cfg.Daemon.CycleSleepSec)
 		cfg.Daemon.CycleSleepSec = 10
 	}
+	if cfg.Daemon.MaxLatencyMs < 0 {
+		slog.Warn("max_latency_ms too low, disabling threshold", "provided", cfg.Daemon.MaxLatencyMs)
+		cfg.Daemon.MaxLatencyMs = 0
+	}
 
 	depth := models.TestDepth(cfg.Daemon.Depth)
 	if depth != "" && !depth.IsValid() {
@@ -168,7 +179,7 @@ func (c *DaemonConfig) TestDepth() models.TestDepth {
 
 func (c Config) String() string {
 	return fmt.Sprintf(
-		"urls=%s output=%s state=%s sleep=%ds parallel=%d timeout=%ds depth=%s keep_ok=%v retest_interval=%ds http_enabled=%v http_port=%d sub_path=%s api_port=%d",
+		"urls=%s output=%s state=%s sleep=%ds parallel=%d timeout=%ds depth=%s keep_ok=%v retest_interval=%ds max_latency_ms=%d http_enabled=%v http_port=%d sub_path=%s api_port=%d",
 		c.Daemon.URLsFile,
 		c.Daemon.OutputFile,
 		c.Daemon.StateFile,
@@ -178,6 +189,7 @@ func (c Config) String() string {
 		c.Daemon.Depth,
 		c.Daemon.KeepSuccessful,
 		c.Daemon.RetestIntervalSec,
+		c.Daemon.MaxLatencyMs,
 		c.HTTP.Enabled,
 		c.HTTP.Port,
 		c.HTTP.SubPath,

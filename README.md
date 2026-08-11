@@ -126,6 +126,7 @@ All config via environment variables:
 | `DAEMON_DEPTH` | `"standard"` | Test depth: `quick`, `standard`, `full`, `comprehensive` |
 | `DAEMON_KEEP_SUCCESSFUL` | `true` | Re-test working configs on subsequent cycles |
 | `DAEMON_RETEST_INTERVAL` | `1800` | Seconds before re-testing a working config |
+| `DAEMON_MAX_LATENCY_MS` | `0` | Max acceptable latency for a config to be considered working (ms). `0` = disabled. Successful tests above this are treated as failed and excluded from output |
 | `HTTP_ENABLED` | `false` | Enable HTTP subscription + API server |
 | `HTTP_PORT` | `8080` | Subscription endpoint port |
 | `HTTP_SUB_PATH` | `"/sub"` | Path for subscription endpoint |

@@ -110,7 +110,16 @@ type TestResult struct {
 	LatencyMs int
 }
 
-func ApplyResults(s *State, results []TestResult, now time.Time) {
+// ApplyResults updates config states from a round of test results. When
+// maxLatencyMs is provided and > 0, a successful test whose latency exceeds
+// the threshold is treated as a failure (config excluded from working output).
+// The measured latency is still recorded for visibility.
+func ApplyResults(s *State, results []TestResult, now time.Time, maxLatencyMs ...int) {
+	threshold := 0
+	if len(maxLatencyMs) > 0 {
+		threshold = maxLatencyMs[0]
+	}
+
 	for _, r := range results {
 		entry, ok := s.Configs[r.Hash]
 		if !ok {
@@ -119,7 +128,14 @@ func ApplyResults(s *State, results []TestResult, now time.Time) {
 
 		entry.LastTested = now
 
-		if r.Success {
+		success := r.Success
+		if success && threshold > 0 && r.LatencyMs > threshold {
+			// Passed the test but latency over the operator's ceiling:
+			// treat as not working so it drops out of the output.
+			success = false
+		}
+
+		if success {
 			entry.State = StateWorking
 			entry.LastSuccess = now
 			entry.SuccessCount++
@@ -130,6 +146,11 @@ func ApplyResults(s *State, results []TestResult, now time.Time) {
 				entry.State = StateFailed
 			} else if entry.State != StateUnreachable {
 				entry.State = StateFailed
+			}
+			if r.LatencyMs > 0 {
+				// Keep the measured latency even on failure (e.g. a
+				// threshold rejection) for visibility in state.json.
+				entry.LatencyMs = r.LatencyMs
 			}
 		}
 	}

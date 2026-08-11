@@ -141,6 +141,7 @@ DAEMON_TIMEOUT=10                 # per-test timeout in seconds (min 1, default 
 DAEMON_DEPTH=standard             # quick | standard | full | comprehensive
 DAEMON_KEEP_SUCCESSFUL=true       # re-test working configs
 DAEMON_RETEST_INTERVAL=1800       # seconds before re-testing a working config
+DAEMON_MAX_LATENCY_MS=0           # reject configs slower than N ms (0 = disabled)
 HTTP_ENABLED=false                # enable HTTP servers
 HTTP_PORT=8080                    # subscription endpoint port
 HTTP_SUB_PATH=/sub                # GET /sub returns base64 of working.txt

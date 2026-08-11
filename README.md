@@ -1,7 +1,8 @@
-# Viberay Daemon
+# Viberayd
 
-> **Status:** Active. Contributions welcome (see open issues/PRs). Additive changes preferred — extend, don't rewrite.  
-> Next: [Viberoxy](https://github.com/amirrezaalavi/viberoxy) — proxy aggregation server built on top of Viberayd.
+> **Status:** Active. Contributions welcome (see open issues/PRs). Additive changes preferred — extend, don't rewrite.
+>
+> **Companion project:** [Viberoxy](https://github.com/amirrezaalavi/viberoxy) — proxy aggregation server built on top of Viberayd.
 
 A long-running daemon that fetches proxy subscription URLs, tests each config (TCP → Xray), and serves the working ones as a subscription endpoint.
 

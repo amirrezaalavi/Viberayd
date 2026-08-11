@@ -1,7 +1,7 @@
-# Viberay — Agent Guide
+# Viberayd — Agent Guide
 
 > **Status:** Active. Contributions welcome (see open issues/PRs). Additive changes preferred — extend, don't rewrite.
-> **Next project:** [Viberoxy](https://github.com/amirrezaalavi/viberoxy) — proxy aggregation server.
+> **Companion project:** [Viberoxy](https://github.com/amirrezaalavi/viberoxy) — proxy aggregation server.
 
 > **Purpose:** Let agents find the exact files and patterns they need without reading everything.
 

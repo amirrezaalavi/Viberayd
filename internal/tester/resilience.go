@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/amirrezaalavi/Viberay/internal/errors"
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/errors"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // ResilientRunner wraps Pipeline.Run with retry, backoff, categorization,

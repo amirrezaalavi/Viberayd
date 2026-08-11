@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // buildXrayConfig generates a minimal xray-core JSON config that exposes a

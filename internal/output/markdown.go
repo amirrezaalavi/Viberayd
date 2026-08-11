@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // MarkdownFormatter renders working configs with their original share link and latency.

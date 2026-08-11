@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/amirrezaalavi/Viberay/internal/errors"
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/errors"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // Parse accepts a raw string that may contain:

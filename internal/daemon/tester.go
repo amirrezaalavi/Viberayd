@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/amirrezaalavi/Viberay/internal/concurrency"
-	"github.com/amirrezaalavi/Viberay/internal/models"
-	"github.com/amirrezaalavi/Viberay/internal/tester"
+	"github.com/amirrezaalavi/Viberayd/internal/concurrency"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/tester"
 )
 
 type TCPResult struct {

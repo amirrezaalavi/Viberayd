@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/amirrezaalavi/Viberay/internal/daemon"
+	"github.com/amirrezaalavi/Viberayd/internal/daemon"
 )
 
 func main() {

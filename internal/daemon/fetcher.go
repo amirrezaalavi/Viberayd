@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
-	"github.com/amirrezaalavi/Viberay/pkg/fetcher"
-	"github.com/amirrezaalavi/Viberay/pkg/parser"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
+	"github.com/amirrezaalavi/Viberayd/pkg/fetcher"
+	"github.com/amirrezaalavi/Viberayd/pkg/parser"
 )
 
 func LoadURLs(path string) ([]string, error) {

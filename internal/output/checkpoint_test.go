@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 func TestCheckpoint_SaveLoad(t *testing.T) {

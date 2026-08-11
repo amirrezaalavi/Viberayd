@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // Formatter renders a slice of TestResults into a specific output style.

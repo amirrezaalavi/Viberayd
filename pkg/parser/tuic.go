@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/amirrezaalavi/Viberay/internal/errors"
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/errors"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // parseTUIC handles tuic:// URIs.

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // XrayResult holds the outcome of an Xray proxy test.

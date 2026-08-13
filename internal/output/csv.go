@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // CSVFormatter renders working configs as their original share link plus latency.

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 func TestLoadURLs(t *testing.T) {

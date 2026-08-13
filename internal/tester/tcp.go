@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // TCPResult holds the outcome of a TCP connectivity test.

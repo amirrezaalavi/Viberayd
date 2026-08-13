@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // TableFormatter outputs working configs as their original share link plus latency.

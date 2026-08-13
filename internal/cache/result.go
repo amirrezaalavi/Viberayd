@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // ResultCache stores TestResults keyed by server+protocol so duplicate

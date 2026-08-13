@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/amirrezaalavi/Viberay/internal/errors"
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/errors"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // parseSocks5 handles socks5://, socks4://, and socks:// URIs.

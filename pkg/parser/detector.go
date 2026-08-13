@@ -5,8 +5,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/amirrezaalavi/Viberay/internal/errors"
-	"github.com/amirrezaalavi/Viberay/internal/models"
+	"github.com/amirrezaalavi/Viberayd/internal/errors"
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 // DetectProtocol identifies the proxy protocol from a URI prefix.

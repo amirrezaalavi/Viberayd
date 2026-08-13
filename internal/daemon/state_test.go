@@ -284,6 +284,81 @@ func TestApplyResultsMissingHash(t *testing.T) {
 	}
 }
 
+func TestApplyResultsSuccessOverLatencyThreshold(t *testing.T) {
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+
+	s := NewState()
+	s.Configs["h"] = &ConfigEntry{State: StateUnknown}
+
+	// 300ms threshold, test succeeded but took 500ms -> must NOT become working
+	ApplyResults(s, []TestResult{{Hash: "h", Success: true, LatencyMs: 500}}, now, 300)
+
+	entry := s.Configs["h"]
+	if entry.State != StateFailed {
+		t.Errorf("State = %q, want failed (latency over threshold)", entry.State)
+	}
+	if entry.FailCount != 1 {
+		t.Errorf("FailCount = %d, want 1", entry.FailCount)
+	}
+	if entry.LatencyMs != 500 {
+		t.Errorf("LatencyMs = %d, want 500 (kept for visibility)", entry.LatencyMs)
+	}
+	if entry.SuccessCount != 0 {
+		t.Errorf("SuccessCount = %d, want 0", entry.SuccessCount)
+	}
+}
+
+func TestApplyResultsSuccessAtThreshold(t *testing.T) {
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+
+	s := NewState()
+	s.Configs["h"] = &ConfigEntry{State: StateUnknown}
+
+	// Exactly at threshold (300ms) -> still working
+	ApplyResults(s, []TestResult{{Hash: "h", Success: true, LatencyMs: 300}}, now, 300)
+
+	entry := s.Configs["h"]
+	if entry.State != StateWorking {
+		t.Errorf("State = %q, want working (equal to threshold)", entry.State)
+	}
+}
+
+func TestApplyResultsThresholdZeroDisabled(t *testing.T) {
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+
+	s := NewState()
+	s.Configs["h"] = &ConfigEntry{State: StateUnknown}
+
+	// Threshold 0 = disabled: any success becomes working regardless of latency
+	ApplyResults(s, []TestResult{{Hash: "h", Success: true, LatencyMs: 5000}}, now, 0)
+
+	entry := s.Configs["h"]
+	if entry.State != StateWorking {
+		t.Errorf("State = %q, want working (threshold disabled)", entry.State)
+	}
+}
+
+func TestApplyResultsOverThresholdWorkingToFailed(t *testing.T) {
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+
+	s := NewState()
+	s.Configs["h"] = &ConfigEntry{State: StateWorking, SuccessCount: 3, LatencyMs: 100}
+
+	// Previously-working config now exceeds threshold -> demoted
+	ApplyResults(s, []TestResult{{Hash: "h", Success: true, LatencyMs: 900}}, now, 300)
+
+	entry := s.Configs["h"]
+	if entry.State != StateFailed {
+		t.Errorf("State = %q, want failed (working config over threshold)", entry.State)
+	}
+	if entry.FailCount != 1 {
+		t.Errorf("FailCount = %d, want 1", entry.FailCount)
+	}
+	if entry.SuccessCount != 3 {
+		t.Errorf("SuccessCount = %d, want 3 (unchanged)", entry.SuccessCount)
+	}
+}
+
 func TestApplyResultsMultiple(t *testing.T) {
 	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
 

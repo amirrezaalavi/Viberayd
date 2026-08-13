@@ -177,7 +177,7 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 		})
 	}
 
-	ApplyResults(d.State, xrayResults, now)
+	ApplyResults(d.State, xrayResults, now, d.Config.Daemon.MaxLatencyMs)
 	d.writeOutputFile()
 
 	saveCtx, cancel := context.WithTimeout(ctx, 3*time.Second)

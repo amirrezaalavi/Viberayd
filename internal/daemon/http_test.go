@@ -351,3 +351,116 @@ func decodeBase64Str(s string) (string, error) {
 	}
 	return string(decoded), nil
 }
+
+func TestHandleURLsAddInvalid(t *testing.T) {
+	dir := t.TempDir()
+	urlsPath := filepath.Join(dir, "urls.txt")
+	os.WriteFile(urlsPath, []byte("https://old.example.com\n"), 0644)
+
+	cfg := DefaultConfig()
+	cfg.Daemon.URLsFile = urlsPath
+	hs := &httpServer{daemon: &Daemon{Config: &cfg}}
+
+	for _, bad := range []string{"not-a-url", "ftp://x.example.com", ""} {
+		body := bytes.NewReader([]byte(`{"url": "` + bad + `"}`))
+		req := httptest.NewRequest(http.MethodPost, "/api/urls", body)
+		w := httptest.NewRecorder()
+		hs.handleURLs(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("add %q = %d, want 400", bad, w.Code)
+		}
+	}
+
+	// Original file untouched.
+	data, _ := os.ReadFile(urlsPath)
+	if strings.Contains(string(data), "not-a-url") {
+		t.Error("invalid url written to file")
+	}
+}
+
+func TestHandleURLsReplace(t *testing.T) {
+	dir := t.TempDir()
+	urlsPath := filepath.Join(dir, "urls.txt")
+	os.WriteFile(urlsPath, []byte("https://a.example.com\nhttps://b.example.com\n"), 0644)
+
+	cfg := DefaultConfig()
+	cfg.Daemon.URLsFile = urlsPath
+	hs := &httpServer{daemon: &Daemon{Config: &cfg}}
+
+	body := bytes.NewReader([]byte(`{"urls": ["https://b.example.com", "https://c.example.com", "https://d.example.com"]}`))
+	req := httptest.NewRequest(http.MethodPut, "/api/urls", body)
+	w := httptest.NewRecorder()
+	hs.handleURLs(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		URLs []string `json:"urls"`
+	}
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp.URLs) != 3 {
+		t.Fatalf("replaced urls = %v, want 3", resp.URLs)
+	}
+
+	data, _ := os.ReadFile(urlsPath)
+	content := string(data)
+	if strings.Contains(content, "a.example.com") {
+		t.Error("old url not removed")
+	}
+	if !strings.Contains(content, "c.example.com") {
+		t.Error("new url missing")
+	}
+}
+
+func TestHandleURLsReplaceRejectsInvalid(t *testing.T) {
+	dir := t.TempDir()
+	urlsPath := filepath.Join(dir, "urls.txt")
+	os.WriteFile(urlsPath, []byte("https://keep.example.com\n"), 0644)
+
+	cfg := DefaultConfig()
+	cfg.Daemon.URLsFile = urlsPath
+	hs := &httpServer{daemon: &Daemon{Config: &cfg}}
+
+	body := bytes.NewReader([]byte(`{"urls": ["https://keep.example.com", "bad-url", "ftp://nope.example"]}`))
+	req := httptest.NewRequest(http.MethodPut, "/api/urls", body)
+	w := httptest.NewRecorder()
+	hs.handleURLs(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
+	}
+
+	// Whole request rejected: file unchanged (no partial write).
+	data, _ := os.ReadFile(urlsPath)
+	if !strings.Contains(string(data), "keep.example.com") {
+		t.Error("file was modified on rejected replace")
+	}
+}
+
+func TestValidSubscriptionURL(t *testing.T) {
+	valid := []string{
+		"https://sub.example.com",
+		"http://sub.example.com",
+		"https://sub.example.com/path?x=1",
+	}
+	invalid := []string{
+		"",
+		"not-a-url",
+		"ftp://x.example.com",
+		"file:///etc/passwd",
+		"https://",
+		"javascript:alert(1)",
+	}
+	for _, u := range valid {
+		if !validSubscriptionURL(u) {
+			t.Errorf("%q should be valid", u)
+		}
+	}
+	for _, u := range invalid {
+		if validSubscriptionURL(u) {
+			t.Errorf("%q should be invalid", u)
+		}
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -110,9 +111,23 @@ func (hs *httpServer) handleURLs(w http.ResponseWriter, r *http.Request) {
 		hs.listURLs(w, r)
 	case http.MethodPost:
 		hs.addURL(w, r)
+	case http.MethodPut:
+		hs.replaceURLs(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// validSubscriptionURL reports whether a string is a usable http(s)
+// subscription URL. Used by addURL and replaceURLs so garbage never enters
+// the urls file (error correction at input time; the fetch loop tolerates
+// unreachable URLs at runtime, but malformed entries are rejected here).
+func validSubscriptionURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
 func (hs *httpServer) listURLs(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +153,10 @@ func (hs *httpServer) addURL(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "url is required", http.StatusBadRequest)
 		return
 	}
+	if !validSubscriptionURL(body.URL) {
+		jsonError(w, "invalid url (must be http or https)", http.StatusBadRequest)
+		return
+	}
 
 	f, err := os.OpenFile(hs.daemon.Config.Daemon.URLsFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
@@ -154,6 +173,55 @@ func (hs *httpServer) addURL(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"status": "added", "url": body.URL})
+}
+
+// replaceURLs atomically replaces the whole urls file with the given list
+// (PUT /api/urls with {"urls": [...]}). Every non-empty line must be a valid
+// http(s) URL; if any line is invalid the whole request is rejected (400 with
+// the offending entries) so a bad batch can never leave the file half-written
+// or silently drop URLs the operator thought were saved.
+func (hs *httpServer) replaceURLs(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URLs []string `json:"urls"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	var valid, invalid []string
+	for _, raw := range body.URLs {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if !validSubscriptionURL(line) {
+			invalid = append(invalid, line)
+			continue
+		}
+		valid = append(valid, line)
+	}
+	if len(invalid) > 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":   "invalid url(s)",
+			"invalid": invalid,
+		})
+		return
+	}
+
+	data := strings.Join(valid, "\n")
+	if len(valid) > 0 {
+		data += "\n"
+	}
+	if err := os.WriteFile(hs.daemon.Config.Daemon.URLsFile, []byte(data), 0644); err != nil {
+		jsonError(w, "write urls: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"status": "replaced", "urls": valid})
 }
 
 func (hs *httpServer) handleURLsByID(w http.ResponseWriter, r *http.Request) {

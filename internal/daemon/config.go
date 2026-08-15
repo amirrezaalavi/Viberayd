@@ -26,6 +26,7 @@ type DaemonConfig struct {
 	Depth             string
 	KeepSuccessful    bool
 	RetestIntervalSec int
+	TCPPing           bool
 }
 
 type HTTPConfig struct {
@@ -100,6 +101,15 @@ func LoadConfigFromEnv() Config {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Daemon.RetestIntervalSec = n
 		}
+	}
+
+	// DAEMON_TCP_PING: gate candidates behind a fast TCP-connect prefilter
+	// (default true). On networks that filter direct TCP to foreign hosts
+	// the prefilter marks everything unreachable and the real xray test
+	// never runs — set false to let the xray test be the judge.
+	cfg.Daemon.TCPPing = true
+	if v, ok := os.LookupEnv("DAEMON_TCP_PING"); ok {
+		cfg.Daemon.TCPPing = v == "true" || v == "1" || v == "yes"
 	}
 
 	if v, ok := os.LookupEnv("HTTP_ENABLED"); ok {

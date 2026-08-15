@@ -141,22 +141,38 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 	if tcpTimeout > 5*time.Second {
 		tcpTimeout = 5 * time.Second
 	}
-	tcpResults := TCPPing(ctx, candidateCfgs, tcpTimeout)
 
+	// DAEMON_TCP_PING gate. When enabled (default), a fast TCP-connect
+	// prefilter removes dead hosts before the expensive xray test; failed
+	// pings are marked unreachable and skipped. When disabled, the TCP
+	// prefilter is skipped entirely and every candidate goes to the xray
+	// test, which is the authoritative judge — on networks that filter
+	// direct TCP to foreign hosts the prefilter otherwise marks everything
+	// unreachable and the pool can never recover.
 	var survivors []NamedConfig
-	for _, hash := range candidates {
-		tr, ok := tcpResults[hash]
-		if !ok || !tr.Success {
-			entry, exists := d.State.Configs[hash]
-			if exists && entry.State != StateUnreachable {
-				entry.State = StateUnreachable
-				entry.LastTested = now
+	if d.Config.Daemon.TCPPing {
+		tcpResults := TCPPing(ctx, candidateCfgs, tcpTimeout)
+		for _, hash := range candidates {
+			tr, ok := tcpResults[hash]
+			if !ok || !tr.Success {
+				entry, exists := d.State.Configs[hash]
+				if exists && entry.State != StateUnreachable {
+					entry.State = StateUnreachable
+					entry.LastTested = now
+				}
+				continue
 			}
-			continue
+			if cfg, ok := d.configs[hash]; ok {
+				survivors = append(survivors, NamedConfig{Hash: hash, Cfg: cfg})
+			}
 		}
-		if cfg, ok := d.configs[hash]; ok {
-			survivors = append(survivors, NamedConfig{Hash: hash, Cfg: cfg})
+	} else {
+		for _, hash := range candidates {
+			if cfg, ok := d.configs[hash]; ok {
+				survivors = append(survivors, NamedConfig{Hash: hash, Cfg: cfg})
+			}
 		}
+		slog.Info("tcp ping disabled, testing all candidates via xray", "count", len(survivors))
 	}
 
 	if ctx.Err() != nil {

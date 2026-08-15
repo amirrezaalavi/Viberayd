@@ -126,6 +126,7 @@ All config via environment variables:
 | `DAEMON_DEPTH` | `"standard"` | Test depth: `quick`, `standard`, `full`, `comprehensive` |
 | `DAEMON_KEEP_SUCCESSFUL` | `true` | Re-test working configs on subsequent cycles |
 | `DAEMON_RETEST_INTERVAL` | `1800` | Seconds before re-testing a working config |
+| `DAEMON_TCP_PING` | `true` | Fast TCP-connect prefilter before the xray test. Set `false` on networks that filter direct TCP to foreign hosts — otherwise everything is marked unreachable and never reaches the authoritative xray test |
 | `HTTP_ENABLED` | `false` | Enable HTTP subscription + API server |
 | `HTTP_PORT` | `8080` | Subscription endpoint port |
 | `HTTP_SUB_PATH` | `"/sub"` | Path for subscription endpoint |

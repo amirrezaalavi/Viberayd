@@ -34,6 +34,7 @@ func TestDefaultConfig(t *testing.T) {
 		"DAEMON_URLS_FILE", "DAEMON_OUTPUT_FILE", "DAEMON_STATE_FILE",
 		"DAEMON_CYCLE_SLEEP", "DAEMON_PARALLEL", "DAEMON_TIMEOUT",
 		"DAEMON_DEPTH", "DAEMON_KEEP_SUCCESSFUL", "DAEMON_RETEST_INTERVAL",
+		"DAEMON_TCP_PING",
 		"HTTP_ENABLED", "HTTP_PORT", "HTTP_SUB_PATH", "HTTP_API_PORT",
 	} {
 		unsetenv(t, key)
@@ -70,6 +71,9 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if cfg.Daemon.RetestIntervalSec != 1800 {
 		t.Errorf("RetestIntervalSec = %d, want 1800", cfg.Daemon.RetestIntervalSec)
+	}
+	if !cfg.Daemon.TCPPing {
+		t.Error("TCPPing = false, want true (default)")
 	}
 	if cfg.HTTP.Enabled != false {
 		t.Errorf("HTTP.Enabled = %v, want false", cfg.HTTP.Enabled)
@@ -254,3 +258,21 @@ func TestConfigString(t *testing.T) {
 }
 
 
+
+func TestLoadConfigTCPPingOff(t *testing.T) {
+	unsetenv(t, "DAEMON_TCP_PING")
+	setenv(t, "DAEMON_TCP_PING", "false")
+	cfg := LoadConfigFromEnv()
+	if cfg.Daemon.TCPPing {
+		t.Error("TCPPing = true, want false (DAEMON_TCP_PING=false)")
+	}
+}
+
+func TestLoadConfigTCPPingOn(t *testing.T) {
+	unsetenv(t, "DAEMON_TCP_PING")
+	setenv(t, "DAEMON_TCP_PING", "1")
+	cfg := LoadConfigFromEnv()
+	if !cfg.Daemon.TCPPing {
+		t.Error("TCPPing = false, want true (DAEMON_TCP_PING=1)")
+	}
+}

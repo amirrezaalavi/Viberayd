@@ -1,5 +1,5 @@
 # Stage 1: Build viberayd
-FROM golang:1.26-alpine AS builder
+FROM golang:1.21-alpine AS builder
 
 WORKDIR /src
 

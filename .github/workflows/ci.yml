@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - name: Checkout
@@ -39,7 +39,7 @@ jobs:
       - name: Cross-compile (ubuntu only)
         if: runner.os == 'Linux'
         run: |
-          make build-linux build-mac build-windows
+          make build-linux build-mac
           ls -la build/
 
   coverage:

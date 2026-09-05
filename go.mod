@@ -1,3 +1,3 @@
 module github.com/amirrezaalavi/Viberayd
 
-go 1.26.4
+go 1.21.0

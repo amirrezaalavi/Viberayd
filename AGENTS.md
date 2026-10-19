@@ -143,6 +143,7 @@ DAEMON_DEPTH=standard             # quick | standard | full | comprehensive
 DAEMON_KEEP_SUCCESSFUL=true       # re-test working configs
 DAEMON_RETEST_INTERVAL=1800       # seconds before re-testing a working config
 DAEMON_MAX_LATENCY_MS=0           # reject configs slower than N ms (0 = disabled)
+DAEMON_PORT_BASE=10820            # first local SOCKS port for xray tests (set per instance)
 HTTP_ENABLED=false                # enable HTTP servers
 HTTP_PORT=8080                    # subscription endpoint port
 HTTP_SUB_PATH=/sub                # GET /sub returns base64 of working.txt

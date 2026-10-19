@@ -27,6 +27,10 @@ type DaemonConfig struct {
 	KeepSuccessful    bool
 	RetestIntervalSec int
 	MaxLatencyMs      int
+	// PortBase is the first local SOCKS port the xray test pool draws from.
+	// It must differ between daemon instances sharing a host so two pools can
+	// never race for the same port.
+	PortBase int
 }
 
 type HTTPConfig struct {
@@ -49,6 +53,7 @@ func DefaultConfig() Config {
 			Depth:             "standard",
 			KeepSuccessful:    true,
 			RetestIntervalSec: 1800,
+			PortBase:          10820,
 		},
 		HTTP: HTTPConfig{
 			Enabled: false,
@@ -109,6 +114,12 @@ func LoadConfigFromEnv() Config {
 		}
 	}
 
+	if v, ok := os.LookupEnv("DAEMON_PORT_BASE"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.PortBase = n
+		}
+	}
+
 	if v, ok := os.LookupEnv("HTTP_ENABLED"); ok {
 		cfg.HTTP.Enabled = v == "true" || v == "1" || v == "yes"
 	}
@@ -153,6 +164,12 @@ func validate(cfg *Config) {
 		slog.Warn("max_latency_ms too low, disabling threshold", "provided", cfg.Daemon.MaxLatencyMs)
 		cfg.Daemon.MaxLatencyMs = 0
 	}
+	// A port base below 1024 needs privileges and a base near the top of the
+	// range cannot fit the test pool; fall back loudly rather than failing.
+	if cfg.Daemon.PortBase < 1024 || cfg.Daemon.PortBase > 64000 {
+		slog.Warn("port_base out of range, using default 10820", "provided", cfg.Daemon.PortBase)
+		cfg.Daemon.PortBase = 10820
+	}
 
 	depth := models.TestDepth(cfg.Daemon.Depth)
 	if depth != "" && !depth.IsValid() {
@@ -179,7 +196,7 @@ func (c *DaemonConfig) TestDepth() models.TestDepth {
 
 func (c Config) String() string {
 	return fmt.Sprintf(
-		"urls=%s output=%s state=%s sleep=%ds parallel=%d timeout=%ds depth=%s keep_ok=%v retest_interval=%ds max_latency_ms=%d http_enabled=%v http_port=%d sub_path=%s api_port=%d",
+		"urls=%s output=%s state=%s sleep=%ds parallel=%d timeout=%ds depth=%s keep_ok=%v retest_interval=%ds max_latency_ms=%d port_base=%d http_enabled=%v http_port=%d sub_path=%s api_port=%d",
 		c.Daemon.URLsFile,
 		c.Daemon.OutputFile,
 		c.Daemon.StateFile,
@@ -190,6 +207,7 @@ func (c Config) String() string {
 		c.Daemon.KeepSuccessful,
 		c.Daemon.RetestIntervalSec,
 		c.Daemon.MaxLatencyMs,
+		c.Daemon.PortBase,
 		c.HTTP.Enabled,
 		c.HTTP.Port,
 		c.HTTP.SubPath,

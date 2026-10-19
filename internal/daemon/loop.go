@@ -52,6 +52,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		"cycle_sleep", d.Config.Daemon.CycleSleep(),
 		"parallel", d.Config.Daemon.Parallel,
 		"depth", d.Config.Daemon.Depth,
+		"port_base", d.Config.Daemon.PortBase,
 	)
 
 	if d.Config.HTTP.Enabled {
@@ -59,6 +60,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 			return fmt.Errorf("start http: %w", err)
 		}
 	}
+
+	// Publish the output file from the state we just loaded, before the first
+	// (possibly hours-long) cycle runs. Otherwise /sub keeps serving whatever
+	// the previous process left on disk, which may be stale or, as with the
+	// old " <latency>ms" format, unusable by clients.
+	d.writeOutputFile()
 
 	for {
 		select {
@@ -176,7 +183,7 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 			Timeout:  timeout,
 			Depth:    d.Config.Daemon.TestDepth(),
 			XrayBin:  "xray",
-			PortBase: 10820,
+			PortBase: d.Config.Daemon.PortBase,
 		})
 	}
 

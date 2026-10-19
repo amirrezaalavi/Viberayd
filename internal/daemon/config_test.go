@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -251,6 +252,24 @@ func TestConfigString(t *testing.T) {
 	if len(s) == 0 {
 		t.Fatal("String() returned empty")
 	}
+	if !strings.Contains(s, "port_base=10820") {
+		t.Errorf("String() should report the port base: %s", s)
+	}
 }
 
+func TestPortBaseConfig(t *testing.T) {
+	if got := DefaultConfig().Daemon.PortBase; got != 10820 {
+		t.Errorf("default PortBase = %d, want 10820", got)
+	}
 
+	t.Setenv("DAEMON_PORT_BASE", "11050")
+	if got := LoadConfigFromEnv().Daemon.PortBase; got != 11050 {
+		t.Errorf("PortBase from env = %d, want 11050", got)
+	}
+
+	// Out-of-range values fall back to the default instead of failing boot.
+	t.Setenv("DAEMON_PORT_BASE", "80")
+	if got := LoadConfigFromEnv().Daemon.PortBase; got != 10820 {
+		t.Errorf("out-of-range PortBase = %d, want 10820", got)
+	}
+}

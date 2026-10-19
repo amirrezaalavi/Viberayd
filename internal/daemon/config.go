@@ -42,6 +42,14 @@ type DaemonConfig struct {
 	// single-sample behaviour; 2 is the default so a node that fails most
 	// attempts never reaches working.txt.
 	StabilityProbes int
+	// MaxXrayTests caps how many TCP-reachable configs go on to the expensive
+	// stages (real proxy test, domain check, stability probes) per cycle,
+	// keeping the fastest TCP handshakes. The cheap TCP pre-filter kills most
+	// of a large corpus, but the survivors each need a subprocess and can burn
+	// tens of seconds on a path that is reachable yet dead. Without a cap a
+	// ~650k-candidate corpus never finished a cycle once probes were enabled
+	// (measured: still running after 30 min, nothing published). 0 = no cap.
+	MaxXrayTests int
 }
 
 // DefaultDomains is the full-depth content-check set: large, independent,
@@ -74,6 +82,7 @@ func DefaultConfig() Config {
 			DomainQuorum:      2,
 			DomainMinBytes:    4096,
 			StabilityProbes:   2,
+			MaxXrayTests:      1200,
 		},
 		HTTP: HTTPConfig{
 			Enabled: false,
@@ -140,6 +149,12 @@ func LoadConfigFromEnv() Config {
 	if v, ok := os.LookupEnv("DAEMON_STABILITY_PROBES"); ok {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Daemon.StabilityProbes = n
+		}
+	}
+
+	if v, ok := os.LookupEnv("DAEMON_MAX_XRAY_TESTS"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.MaxXrayTests = n
 		}
 	}
 
@@ -248,6 +263,14 @@ func validate(cfg *Config) {
 		slog.Warn("stability probes too high, clamping to 10", "provided", cfg.Daemon.StabilityProbes)
 		cfg.Daemon.StabilityProbes = 10
 	}
+	if cfg.Daemon.MaxXrayTests < 0 {
+		slog.Warn("max xray tests negative, disabling cap", "provided", cfg.Daemon.MaxXrayTests)
+		cfg.Daemon.MaxXrayTests = 0
+	}
+	if cfg.Daemon.MaxXrayTests > 100000 {
+		slog.Warn("max xray tests too high, clamping to 100000", "provided", cfg.Daemon.MaxXrayTests)
+		cfg.Daemon.MaxXrayTests = 100000
+	}
 }
 
 // DomainList splits the configured comma-separated domain URLs, dropping
@@ -283,7 +306,7 @@ func (c *DaemonConfig) TestDepth() models.TestDepth {
 
 func (c Config) String() string {
 	return fmt.Sprintf(
-		"urls=%s output=%s state=%s sleep=%ds parallel=%d timeout=%ds depth=%s keep_ok=%v retest_interval=%ds max_latency_ms=%d port_base=%d stability_probes=%d http_enabled=%v http_port=%d sub_path=%s api_port=%d",
+		"urls=%s output=%s state=%s sleep=%ds parallel=%d timeout=%ds depth=%s keep_ok=%v retest_interval=%ds max_latency_ms=%d port_base=%d stability_probes=%d max_xray_tests=%d http_enabled=%v http_port=%d sub_path=%s api_port=%d",
 		c.Daemon.URLsFile,
 		c.Daemon.OutputFile,
 		c.Daemon.StateFile,
@@ -296,6 +319,7 @@ func (c Config) String() string {
 		c.Daemon.MaxLatencyMs,
 		c.Daemon.PortBase,
 		c.Daemon.StabilityProbes,
+		c.Daemon.MaxXrayTests,
 		c.HTTP.Enabled,
 		c.HTTP.Port,
 		c.HTTP.SubPath,

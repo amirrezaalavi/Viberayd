@@ -178,6 +178,8 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 
 	var xrayResults []TestResult
 	if len(survivors) > 0 {
+		slog.Info("tcp survivors", "count", len(survivors))
+		survivors = limitSurvivors(survivors, tcpResults, d.Config.Daemon.MaxXrayTests)
 		xrayResults = XrayTest(ctx, survivors, XrayTestConfig{
 			Parallel:        d.Config.Daemon.Parallel,
 			Timeout:         timeout,

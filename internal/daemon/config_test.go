@@ -35,6 +35,7 @@ func TestDefaultConfig(t *testing.T) {
 		"DAEMON_URLS_FILE", "DAEMON_OUTPUT_FILE", "DAEMON_STATE_FILE",
 		"DAEMON_CYCLE_SLEEP", "DAEMON_PARALLEL", "DAEMON_TIMEOUT",
 		"DAEMON_DEPTH", "DAEMON_KEEP_SUCCESSFUL", "DAEMON_RETEST_INTERVAL",
+		"DAEMON_STABILITY_PROBES", "DAEMON_MAX_XRAY_TESTS", "DAEMON_PORT_BASE",
 		"HTTP_ENABLED", "HTTP_PORT", "HTTP_SUB_PATH", "HTTP_API_PORT",
 	} {
 		unsetenv(t, key)
@@ -333,6 +334,32 @@ func TestStabilityProbesConfig(t *testing.T) {
 
 	if s := DefaultConfig().String(); !strings.Contains(s, "stability_probes=2") {
 		t.Errorf("String() should report the probe count: %s", s)
+	}
+}
+
+func TestMaxXrayTestsConfig(t *testing.T) {
+	if got := DefaultConfig().Daemon.MaxXrayTests; got != 1200 {
+		t.Errorf("default MaxXrayTests = %d, want 1200", got)
+	}
+
+	t.Setenv("DAEMON_MAX_XRAY_TESTS", "250")
+	if got := LoadConfigFromEnv().Daemon.MaxXrayTests; got != 250 {
+		t.Errorf("MaxXrayTests from env = %d, want 250", got)
+	}
+
+	// 0 is the documented "no cap" value and must survive validation.
+	t.Setenv("DAEMON_MAX_XRAY_TESTS", "0")
+	if got := LoadConfigFromEnv().Daemon.MaxXrayTests; got != 0 {
+		t.Errorf("MaxXrayTests=0 = %d, want 0 (unlimited)", got)
+	}
+
+	t.Setenv("DAEMON_MAX_XRAY_TESTS", "-5")
+	if got := LoadConfigFromEnv().Daemon.MaxXrayTests; got != 0 {
+		t.Errorf("negative MaxXrayTests = %d, want 0 (unlimited)", got)
+	}
+
+	if s := DefaultConfig().String(); !strings.Contains(s, "max_xray_tests=1200") {
+		t.Errorf("String() should report the cap: %s", s)
 	}
 }
 

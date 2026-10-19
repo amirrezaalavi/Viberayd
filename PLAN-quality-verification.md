@@ -20,10 +20,19 @@
 | Parse loss on a real 128-link sample | 33 malformed | **4 malformed** (all invalid UUIDs) |
 | Live configs recovered from the same 4 feeds | 647,193 | **649,000** (+1,807) |
 | hysteria2/tuic classification | invalid xray outbound, always "failed" | explicit "cannot be tested" fast-fail |
+| Served links stable 3/3 (live set, 25 links) | 16/25 (64%) | gated set on the 128-link sample: **5/5 (100%)** |
 
-Flakiness measured: the same 7 served links scored 6/7, 6/7, 7/7 across three
-e2e runs — upstream nodes are point-in-time. A single test cannot guarantee
-"stable"; see Remaining work.
+Stability gate: re-checking the live served set three times showed 16 links
+passing 3/3, 5 passing 2/3 and 4 passing 1/3 (none 0/3) — a single sample is
+not evidence of a usable tunnel. `DAEMON_STABILITY_PROBES` (default 2) now
+requires two independent end-to-end passes. On the 128-link sample the gate
+cut working from 7 to 5 and all 5 then passed 3/3 re-checks.
+
+While wiring this I found a second real bug: `XrayTest` wrapped the whole
+config in **one** `DAEMON_TIMEOUT` context although each stage has its own
+timeout, so the extra probe was cancelled mid-flight (sample fell to 1
+working, all failing with "context deadline exceeded"). `Pipeline.Budget()`
+now sizes the context from the stages, and the gate behaved as designed.
 
 **Key artifacts**
 - `cmd/qualitycheck` — strict-parse + optional end-to-end verifier; non-zero exit on any annotated/malformed/failing line.

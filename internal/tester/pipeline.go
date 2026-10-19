@@ -55,16 +55,55 @@ func NewPipeline(depth models.TestDepth) *Pipeline {
 	}
 }
 
+// Budget returns a generous upper bound for one config's whole run. Every
+// stage has its own timeout, so the caller's context must not be a single
+// stage timeout: with the stability probes a full-depth config can legitimately
+// need several proxy and domain passes, and a one-timeout wrapper silently
+// cancelled the extra probes (they all failed with "context deadline
+// exceeded", rejecting configs that had already passed once).
+//
+// Count: TCP + TLS + protocol + one end-to-end verification, plus one more
+// end-to-end verification per extra stability probe, where an end-to-end
+// verification costs a proxy attempt plus (at full depth) a domain pass.
+func (p *Pipeline) Budget() time.Duration {
+	probes := p.StabilityProbes
+	if probes < 1 {
+		probes = 1
+	}
+	units := 3 + probes // TCP, TLS, protocol + probes end-to-end verifications
+	if p.normalizedDepth() == models.DepthFull && len(p.DomainURLs) > 0 {
+		units += probes // a domain pass per verification
+	}
+	stage := p.XrayTimeout
+	for _, d := range []time.Duration{p.TCPTimeout, p.TLSTimeout, p.ProtoTimeout} {
+		if d > stage {
+			stage = d
+		}
+	}
+	if stage <= 0 {
+		stage = 30 * time.Second
+	}
+	return time.Duration(units) * stage
+}
+
+// normalizedDepth collapses the deprecated comprehensive alias onto full.
+func (p *Pipeline) normalizedDepth() models.TestDepth {
+	if p.Depth == models.DepthComprehensive {
+		return models.DepthFull
+	}
+	return p.Depth
+}
+
 // Run executes the test stages for cfg and returns a TestResult.
 // Stages are gated by Depth (comprehensive is normalized to full):
 //   - Quick:    TCP + TLS + Protocol (no subprocess spawned)
 //   - Standard: Quick + Xray real-delay test (2xx required)
 //   - Full:     Standard + multi-domain content check (quorum)
+//
+// When StabilityProbes > 1, every depth that reached StageProxy repeats the
+// end-to-end verification at StageStability before reporting success.
 func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) models.TestResult {
-	depth := p.Depth
-	if depth == models.DepthComprehensive {
-		depth = models.DepthFull
-	}
+	depth := p.normalizedDepth()
 	res := models.TestResult{
 		ID:        fmt.Sprintf("%s-%s", cfg.Protocol(), cfg.Addr()),
 		Config:    cfg,

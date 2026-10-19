@@ -116,7 +116,10 @@ func XrayTest(ctx context.Context, configs []NamedConfig, cfg XrayTestConfig) []
 			}
 			defer pm.Release(port)
 
-			testCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+			// The pipeline runs several stages, each with its own timeout;
+			// a single cfg.Timeout wrapper cancelled the later stages (and
+			// every extra stability probe) on slower configs.
+			testCtx, cancel := context.WithTimeout(ctx, pipeline.Budget())
 			defer cancel()
 
 			res := pipeline.Run(testCtx, c, port)

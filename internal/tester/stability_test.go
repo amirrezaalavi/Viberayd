@@ -4,6 +4,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
 func TestRunStabilityProbes(t *testing.T) {
@@ -51,5 +54,33 @@ func TestRunStabilityProbesFailsOnAnyProbe(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Errorf("verify called %d times, want 2 (stop at first failure)", calls)
+	}
+}
+
+func TestPipelineBudgetCoversAllStages(t *testing.T) {
+	p := NewPipeline(models.DepthFull)
+	p.TCPTimeout = 10 * time.Second
+	p.TLSTimeout = 10 * time.Second
+	p.ProtoTimeout = 10 * time.Second
+	p.XrayTimeout = 10 * time.Second
+	p.StabilityProbes = 2
+	p.DomainURLs = []string{"https://example.com"}
+
+	// TCP + TLS + protocol + 2 proxy passes + 2 domain passes = 7 units.
+	if got, want := p.Budget(), 70*time.Second; got != want {
+		t.Errorf("full budget = %v, want %v", got, want)
+	}
+
+	// A single sample and no domains needs only 4 units.
+	p.StabilityProbes = 1
+	p.XrayTimeout = 10 * time.Second
+	p.DomainURLs = nil
+	if got, want := p.Budget(), 40*time.Second; got != want {
+		t.Errorf("standard budget = %v, want %v", got, want)
+	}
+
+	// A zero-value pipeline must still return a usable bound.
+	if got := (&Pipeline{}).Budget(); got <= 0 {
+		t.Errorf("zero pipeline budget = %v, want > 0", got)
 	}
 }

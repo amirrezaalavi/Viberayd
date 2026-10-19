@@ -229,66 +229,30 @@ func TestBuildWireGuardOutbound(t *testing.T) {
 		}
 	}
 
-	func TestBuildTUICOutbound(t *testing.T) {
-		cfg := models.ProxyConfig{
+	// tuic and hysteria2 have no xray-core outbound (verified against Xray
+	// 26.7.11: both fail `xray -test` with "unknown config id"), so
+	// buildOutbound must reject them instead of producing a config xray
+	// cannot load.
+	func TestBuildOutboundRejectsUnsupportedProtocols(t *testing.T) {
+		tuic := models.ProxyConfig{
 			TUIC: &models.TUICConfig{
-				BaseConfig:        models.BaseConfig{Server: "tuic.example.com", Port: 443, Protocol: models.ProtocolTUIC},
-				UUID:              "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-				Password:          "mypass",
-				CongestionControl: "bbr",
-				UDPRelayMode:      "native",
-				TLSConfig:         models.TLSConfig{SNI: "example.com", Enabled: true},
+				BaseConfig: models.BaseConfig{Server: "tuic.example.com", Port: 443, Protocol: models.ProtocolTUIC},
+				UUID:       "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+				Password:   "mypass",
 			},
 		}
-		out, err := buildOutbound(cfg)
-		if err != nil {
-			t.Fatalf("buildOutbound tuic: %v", err)
+		if _, err := buildOutbound(tuic); err == nil {
+			t.Error("buildOutbound tuic should fail: xray has no tuic outbound")
 		}
-		if out["protocol"] != "tuic" {
-			t.Errorf("protocol = %v, want tuic", out["protocol"])
-		}
-		stream, ok := out["streamSettings"].(map[string]any)
-		if !ok {
-			t.Fatal("missing streamSettings")
-		}
-		if stream["network"] != "quic" {
-			t.Errorf("network = %v, want quic", stream["network"])
-		}
-		if stream["security"] != "tls" {
-			t.Errorf("security = %v, want tls", stream["security"])
-		}
-	}
 
-	func TestBuildHysteria2Outbound(t *testing.T) {
-		cfg := models.ProxyConfig{
+		hy2 := models.ProxyConfig{
 			Hysteria2: &models.Hysteria2Config{
 				BaseConfig: models.BaseConfig{Server: "hy2.example.com", Port: 443, Protocol: models.ProtocolHysteria2},
 				Auth:       "myauth",
-				UpMbps:     100,
-				DownMbps:   200,
-				ObfsType:   "salamander",
-				TLSConfig:  models.TLSConfig{SNI: "example.com", Enabled: true},
 			},
 		}
-		out, err := buildOutbound(cfg)
-		if err != nil {
-			t.Fatalf("buildOutbound hysteria2: %v", err)
-		}
-		if out["protocol"] != "hysteria2" {
-			t.Errorf("protocol = %v, want hysteria2", out["protocol"])
-		}
-		settings, ok := out["settings"].(map[string]any)
-		if !ok {
-			t.Fatal("missing settings")
-		}
-		if settings["auth"] != "myauth" {
-			t.Errorf("auth = %v", settings["auth"])
-		}
-		if settings["up"] != "100 mbps" {
-			t.Errorf("up = %v, want 100 mbps", settings["up"])
-		}
-		if settings["down"] != "200 mbps" {
-			t.Errorf("down = %v, want 200 mbps", settings["down"])
+		if _, err := buildOutbound(hy2); err == nil {
+			t.Error("buildOutbound hysteria2 should fail: xray has no hysteria2 outbound")
 		}
 	}
 
@@ -375,6 +339,10 @@ func TestBuildWireGuardOutbound(t *testing.T) {
 	}
 
 	func TestBuildXrayConfig_AllProtocols(t *testing.T) {
+		// Protocols xray-core actually implements. tuic and hysteria2 are
+		// deliberately absent: xray has no such outbound (verified against
+		// Xray 26.7.11), so buildXrayConfig must reject them instead of
+		// emitting a config xray refuses to load.
 		protocols := map[models.Protocol]models.ProxyConfig{
 			models.ProtocolSS:        {SS: &models.SSConfig{BaseConfig: models.BaseConfig{Server: "ss.example.com", Port: 8388, Protocol: models.ProtocolSS}, Method: "aes-256-gcm", Password: "pass"}},
 			models.ProtocolVMess:     {VMess: &models.VMessConfig{BaseConfig: models.BaseConfig{Server: "vmess.example.com", Port: 443, Protocol: models.ProtocolVMess}, UUID: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", Security: "auto"}},
@@ -382,8 +350,6 @@ func TestBuildWireGuardOutbound(t *testing.T) {
 			models.ProtocolTrojan:    {Trojan: &models.TrojanConfig{BaseConfig: models.BaseConfig{Server: "tr.example.com", Port: 443, Protocol: models.ProtocolTrojan}, Password: "pass"}},
 			models.ProtocolReality:   {Reality: &models.RealityConfig{BaseConfig: models.BaseConfig{Server: "reality.example.com", Port: 443, Protocol: models.ProtocolReality}, UUID: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", PublicKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}},
 			models.ProtocolWireGuard: {WireGuard: &models.WireGuardConfig{BaseConfig: models.BaseConfig{Server: "wg.example.com", Port: 51820, Protocol: models.ProtocolWireGuard}, PrivateKey: "key", PublicKey: "pubkey", LocalAddress: "10.0.0.2/32"}},
-			models.ProtocolTUIC:      {TUIC: &models.TUICConfig{BaseConfig: models.BaseConfig{Server: "tuic.example.com", Port: 443, Protocol: models.ProtocolTUIC}, UUID: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", Password: "pass"}},
-			models.ProtocolHysteria2: {Hysteria2: &models.Hysteria2Config{BaseConfig: models.BaseConfig{Server: "hy2.example.com", Port: 443, Protocol: models.ProtocolHysteria2}, Auth: "auth"}},
 			models.ProtocolSocks5:    {Socks5: &models.Socks5Config{BaseConfig: models.BaseConfig{Server: "s5.example.com", Port: 1080, Protocol: models.ProtocolSocks5}, Username: "user", Password: "pass"}},
 		}
 		for proto, cfg := range protocols {

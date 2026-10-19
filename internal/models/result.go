@@ -11,6 +11,7 @@ const (
 	StageTLS       = "tls"
 	StageProtocol  = "protocol"
 	StageProxy     = "proxy"
+	StageDomain    = "domain"
 	StageCompleted = "completed"
 )
 

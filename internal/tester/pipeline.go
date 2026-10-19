@@ -10,13 +10,19 @@ import (
 
 // Pipeline runs the testing stages for a single config according to the chosen depth.
 type Pipeline struct {
-	Depth       models.TestDepth
-	TCPTimeout  time.Duration
-	TLSTimeout  time.Duration
+	Depth        models.TestDepth
+	TCPTimeout   time.Duration
+	TLSTimeout   time.Duration
 	ProtoTimeout time.Duration
-	XrayTimeout time.Duration
-	PortBase    int
-	XrayBin     string
+	XrayTimeout  time.Duration
+	PortBase     int
+	XrayBin      string
+	// Domain check (full depth only): fetch these through the proxy and
+	// require 2xx + DomainMinBytes; pass when >= DomainQuorum succeed.
+	DomainURLs     []string
+	DomainTimeout  time.Duration
+	DomainMinBytes int64
+	DomainQuorum   int
 }
 
 // NewPipeline creates a pipeline with defaults.
@@ -29,16 +35,27 @@ func NewPipeline(depth models.TestDepth) *Pipeline {
 		XrayTimeout:  30 * time.Second,
 		PortBase:     10820,
 		XrayBin:      "xray",
+		DomainURLs: []string{
+			"https://youtube.com",
+			"https://www.google.com",
+			"https://www.cloudflare.com",
+		},
+		DomainTimeout:  5 * time.Second,
+		DomainMinBytes: 4096,
+		DomainQuorum:   2,
 	}
 }
 
 // Run executes the test stages for cfg and returns a TestResult.
-// Stages are gated by Depth:
-//   - Quick:       TCP only
-//   - Standard:    TCP + TLS
-//   - Full:        TCP + TLS + Protocol
-//   - Comprehensive: TCP + TLS + Protocol + Xray proxy test
+// Stages are gated by Depth (comprehensive is normalized to full):
+//   - Quick:    TCP + TLS + Protocol (no subprocess spawned)
+//   - Standard: Quick + Xray real-delay test (2xx required)
+//   - Full:     Standard + multi-domain content check (quorum)
 func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) models.TestResult {
+	depth := p.Depth
+	if depth == models.DepthComprehensive {
+		depth = models.DepthFull
+	}
 	res := models.TestResult{
 		ID:        fmt.Sprintf("%s-%s", cfg.Protocol(), cfg.Addr()),
 		Config:    cfg,
@@ -57,11 +74,6 @@ func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) mo
 		return res
 	}
 
-	if p.Depth == models.DepthQuick {
-		res.Stage = models.StageCompleted
-		return res
-	}
-
 	// Stage 2: TLS (if applicable)
 	res.Stage = models.StageTLS
 	hasTLS := p.needsTLS(cfg)
@@ -75,12 +87,7 @@ func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) mo
 		}
 	}
 
-	if p.Depth == models.DepthStandard {
-		res.Stage = models.StageCompleted
-		return res
-	}
-
-	// Stage 3: Protocol handshake
+	// Stage 3: Protocol handshake (quick includes everything up to here)
 	res.Stage = models.StageProtocol
 	protoRes := TestProtocol(ctx, cfg, p.ProtoTimeout)
 	res.Latencies.Handshake = protoRes.Latency
@@ -90,12 +97,12 @@ func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) mo
 		return res
 	}
 
-	if p.Depth == models.DepthFull {
+	if depth == models.DepthQuick {
 		res.Stage = models.StageCompleted
 		return res
 	}
 
-	// Stage 4: Xray proxy test (comprehensive)
+	// Stage 4: Xray real-delay test (standard and full)
 	res.Stage = models.StageProxy
 	xr := NewXrayRunner(p.XrayBin)
 	xrayRes := xr.TestXrayProxy(ctx, cfg, port, p.XrayTimeout)
@@ -103,6 +110,30 @@ func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) mo
 	if !xrayRes.Success {
 		res.Status = models.StatusFailed
 		res.Errors = append(res.Errors, xrayRes.Error)
+		return res
+	}
+
+	if depth == models.DepthStandard || len(p.DomainURLs) == 0 {
+		res.Stage = models.StageCompleted
+		return res
+	}
+
+	// Stage 5: multi-domain content check (full only, skipped when no
+	// domains configured). The xray instance from stage 4 is already gone,
+	// so check inside a fresh temp xray.
+	res.Stage = models.StageDomain
+	var domRes DomainResult
+	domErr := xr.withTempXray(ctx, cfg, port, p.XrayTimeout, func(proxyAddr string) error {
+		domRes = CheckDomains(ctx, proxyAddr, p.DomainURLs, p.DomainTimeout, p.DomainMinBytes, p.DomainQuorum)
+		if !domRes.Passed {
+			return fmt.Errorf("domain check: %d/%d passed (quorum %d)",
+				domRes.PassedCount, domRes.Checked, p.DomainQuorum)
+		}
+		return nil
+	})
+	if domErr != nil {
+		res.Status = models.StatusFailed
+		res.Errors = append(res.Errors, domErr.Error())
 		return res
 	}
 

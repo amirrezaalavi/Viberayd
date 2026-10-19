@@ -71,6 +71,18 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Daemon.RetestIntervalSec != 1800 {
 		t.Errorf("RetestIntervalSec = %d, want 1800", cfg.Daemon.RetestIntervalSec)
 	}
+	if cfg.Daemon.Domains != DefaultDomains {
+		t.Errorf("Domains = %q, want defaults", cfg.Daemon.Domains)
+	}
+	if cfg.Daemon.DomainTimeoutSec != 5 {
+		t.Errorf("DomainTimeoutSec = %d, want 5", cfg.Daemon.DomainTimeoutSec)
+	}
+	if cfg.Daemon.DomainQuorum != 2 {
+		t.Errorf("DomainQuorum = %d, want 2", cfg.Daemon.DomainQuorum)
+	}
+	if cfg.Daemon.DomainMinBytes != 4096 {
+		t.Errorf("DomainMinBytes = %d, want 4096", cfg.Daemon.DomainMinBytes)
+	}
 	if cfg.HTTP.Enabled != false {
 		t.Errorf("HTTP.Enabled = %v, want false", cfg.HTTP.Enabled)
 	}
@@ -95,6 +107,10 @@ func TestLoadConfigFull(t *testing.T) {
 	setenv(t, "DAEMON_DEPTH", "comprehensive")
 	setenv(t, "DAEMON_KEEP_SUCCESSFUL", "false")
 	setenv(t, "DAEMON_RETEST_INTERVAL", "3600")
+	setenv(t, "DAEMON_DOMAINS", "https://a.example, https://b.example")
+	setenv(t, "DAEMON_DOMAIN_TIMEOUT", "7")
+	setenv(t, "DAEMON_DOMAIN_QUORUM", "1")
+	setenv(t, "DAEMON_DOMAIN_MIN_BYTES", "512")
 	setenv(t, "HTTP_ENABLED", "true")
 	setenv(t, "HTTP_PORT", "9090")
 	setenv(t, "HTTP_SUB_PATH", "/my_sub")
@@ -128,6 +144,21 @@ func TestLoadConfigFull(t *testing.T) {
 	}
 	if cfg.Daemon.RetestIntervalSec != 3600 {
 		t.Errorf("RetestIntervalSec = %d, want 3600", cfg.Daemon.RetestIntervalSec)
+	}
+	if cfg.Daemon.Domains != "https://a.example, https://b.example" {
+		t.Errorf("Domains = %q, want override", cfg.Daemon.Domains)
+	}
+	if got := cfg.Daemon.DomainList(); len(got) != 2 || got[0] != "https://a.example" || got[1] != "https://b.example" {
+		t.Errorf("DomainList = %q, want trimmed pair", got)
+	}
+	if cfg.Daemon.DomainTimeoutSec != 7 {
+		t.Errorf("DomainTimeoutSec = %d, want 7", cfg.Daemon.DomainTimeoutSec)
+	}
+	if cfg.Daemon.DomainQuorum != 1 {
+		t.Errorf("DomainQuorum = %d, want 1", cfg.Daemon.DomainQuorum)
+	}
+	if cfg.Daemon.DomainMinBytes != 512 {
+		t.Errorf("DomainMinBytes = %d, want 512", cfg.Daemon.DomainMinBytes)
 	}
 	if cfg.HTTP.Enabled != true {
 		t.Errorf("HTTP.Enabled = %v, want true", cfg.HTTP.Enabled)
@@ -242,6 +273,28 @@ func TestConfigTestDepth(t *testing.T) {
 	d := DaemonConfig{Depth: "comprehensive"}
 	if d.TestDepth() != "comprehensive" {
 		t.Errorf("TestDepth() = %q, want comprehensive", d.TestDepth())
+	}
+}
+
+func TestDomainClamps(t *testing.T) {
+	setenv(t, "DAEMON_DOMAIN_TIMEOUT", "0")
+	setenv(t, "DAEMON_DOMAIN_QUORUM", "0")
+	setenv(t, "DAEMON_DOMAIN_MIN_BYTES", "0")
+	setenv(t, "DAEMON_DOMAINS", "")
+
+	cfg := LoadConfigFromEnv()
+
+	if cfg.Daemon.DomainTimeoutSec < 1 {
+		t.Errorf("DomainTimeoutSec = %d, want at least 1", cfg.Daemon.DomainTimeoutSec)
+	}
+	if cfg.Daemon.DomainQuorum < 1 {
+		t.Errorf("DomainQuorum = %d, want at least 1", cfg.Daemon.DomainQuorum)
+	}
+	if cfg.Daemon.DomainMinBytes < 1 {
+		t.Errorf("DomainMinBytes = %d, want at least 1", cfg.Daemon.DomainMinBytes)
+	}
+	if len(cfg.Daemon.DomainList()) == 0 {
+		t.Error("DomainList empty after blank override, want defaults restored")
 	}
 }
 

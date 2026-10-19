@@ -174,6 +174,10 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 			Depth:    d.Config.Daemon.TestDepth(),
 			XrayBin:  "xray",
 			PortBase: 10820,
+			DomainURLs:     d.Config.Daemon.DomainList(),
+			DomainTimeout:  time.Duration(d.Config.Daemon.DomainTimeoutSec) * time.Second,
+			DomainMinBytes: int64(d.Config.Daemon.DomainMinBytes),
+			DomainQuorum:   d.Config.Daemon.DomainQuorum,
 		})
 	}
 

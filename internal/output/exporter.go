@@ -35,7 +35,10 @@ func (e *Export) Run(results []models.TestResult) error {
 	var errors []string
 
 	for _, r := range results {
-		line := fmt.Sprintf("# %s\n%s\n", r.Config.String(), configToURI(r.Config))
+		// Use the verbatim original share link. Reconstructing a URI from the
+		// parsed struct loses fields (vmess payload, ss base64 userinfo,
+		// vless/trojan query params), which is exactly what clients need.
+		line := fmt.Sprintf("# %s\n%s\n", r.Config.String(), r.Config.Raw)
 
 		switch r.Status {
 		case models.StatusSuccess:
@@ -70,40 +73,6 @@ func writeFile(path, content string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(content), 0644)
-}
-
-// configToURI returns a best-effort URI representation. Not guaranteed to be
-// a perfectly round-trippable URI (some fields may be lost).
-func configToURI(cfg models.ProxyConfig) string {
-	b := cfg.Base()
-	switch cfg.Protocol() {
-	case models.ProtocolSS:
-		return fmt.Sprintf("ss://%s:%s@%s:%d#%s", cfg.SS.Method, cfg.SS.Password, b.Server, b.Port, b.Name)
-	case models.ProtocolVMess:
-		return fmt.Sprintf("vmess://%s@%s:%d#%s", cfg.VMess.UUID, b.Server, b.Port, b.Name)
-	case models.ProtocolVLess:
-		return fmt.Sprintf("vless://%s@%s:%d?security=%s#%s", cfg.VLess.UUID, b.Server, b.Port, tlsSec(cfg.VLess.TLSConfig), b.Name)
-	case models.ProtocolTrojan:
-		return fmt.Sprintf("trojan://%s@%s:%d#%s", cfg.Trojan.Password, b.Server, b.Port, b.Name)
-	case models.ProtocolReality:
-		return fmt.Sprintf("vless://%s@%s:%d?security=reality&pbk=%s#%s", cfg.Reality.UUID, b.Server, b.Port, cfg.Reality.PublicKey, b.Name)
-	case models.ProtocolWireGuard:
-		return fmt.Sprintf("wireguard://%s@%s:%d?publicKey=%s#%s", cfg.WireGuard.PrivateKey, b.Server, b.Port, cfg.WireGuard.PublicKey, b.Name)
-	case models.ProtocolTUIC:
-		return fmt.Sprintf("tuic://%s:%s@%s:%d?sni=%s#%s", cfg.TUIC.UUID, cfg.TUIC.Password, b.Server, b.Port, cfg.TUIC.SNI, b.Name)
-	case models.ProtocolHysteria2:
-		return fmt.Sprintf("hysteria2://%s@%s:%d?up=%d&down=%d#%s", cfg.Hysteria2.Auth, b.Server, b.Port, cfg.Hysteria2.UpMbps, cfg.Hysteria2.DownMbps, b.Name)
-	case models.ProtocolSocks5:
-		return fmt.Sprintf("socks5://%s:%s@%s:%d#%s", cfg.Socks5.Username, cfg.Socks5.Password, b.Server, b.Port, b.Name)
-	}
-	return ""
-}
-
-func tlsSec(t models.TLSConfig) string {
-	if t.Enabled {
-		return "tls"
-	}
-	return "none"
 }
 
 func isLegacy(cfg models.ProxyConfig) bool {

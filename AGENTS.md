@@ -133,7 +133,8 @@ failed  → (next cycle)  → working | failed | unreachable
 
 ```
 DAEMON_URLS_FILE=urls.txt         # one subscription URL per line
-DAEMON_OUTPUT_FILE=working.txt    # overwritten each cycle: <raw-uri> <latency-ms>
+DAEMON_OUTPUT_FILE=working.txt    # overwritten each cycle: one verbatim <raw-uri> per line (served as /sub)
+                                  # latency goes to the sibling working.csv (<raw-uri>,<latency-ms>) and state.json
 DAEMON_STATE_FILE=state.json      # persisted config state
 DAEMON_CYCLE_SLEEP=300            # seconds between cycles (min 10, default 300)
 DAEMON_PARALLEL=10                # concurrent xray tests (1-20, default 10)

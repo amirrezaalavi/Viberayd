@@ -20,7 +20,8 @@
 | Parse loss on a real 128-link sample | 33 malformed | **4 malformed** (all invalid UUIDs) |
 | Live configs recovered from the same 4 feeds | 647,193 | **649,000** (+1,807) |
 | hysteria2/tuic classification | invalid xray outbound, always "failed" | explicit "cannot be tested" fast-fail |
-| Served links stable 3/3 (live set, 25 links) | 16/25 (64%) | gated set on the 128-link sample: **5/5 (100%)** |
+| Served links stable 3/3 (live set, 25 links) | 16/25 (64%) | **16/22 (73%)** on the live gated set; 5 pass 2/3, 1 passes 1/3, none 0/3 |
+| Cycle duration (649k candidates, full depth) | 4m42s (single pass) | 49m57s with the gate, **16m33s** with the xray-stage cap |
 
 Stability gate: re-checking the live served set three times showed 16 links
 passing 3/3, 5 passing 2/3 and 4 passing 1/3 (none 0/3) — a single sample is
@@ -33,6 +34,19 @@ config in **one** `DAEMON_TIMEOUT` context although each stage has its own
 timeout, so the extra probe was cancelled mid-flight (sample fell to 1
 working, all failing with "context deadline exceeded"). `Pipeline.Budget()`
 now sizes the context from the stages, and the gate behaved as designed.
+
+**Cycle time, and the cost of the cap (measured).** With `DAEMON_STABILITY_PROBES=2`
+the sweep went from ~4m42s to **49m57s**: the per-config context was widened to
+`Pipeline.Budget()` (~70s) so the probes would not be cancelled, which also let
+every TCP-reachable-but-dead candidate burn its full stage timeouts (3353
+"failed" × ~9s at parallel 10). `DAEMON_MAX_XRAY_TESTS` (default 1200) now caps
+how many TCP survivors reach the deep stages, keeping the fastest handshakes:
+the next cycle took **16m33s** (survivors 5748 → kept 1200, slowest kept 115ms).
+The trade-off is real and unfixed: 4548 survivors were dropped on handshake
+latency alone, and the hash tie-break is stable, so a config that is
+consistently slow to connect may never be tested. A rotating cursor over the
+dropped set (keep N by latency, fill the rest round-robin) is the next change
+if that bias matters.
 
 **Key artifacts**
 - `cmd/qualitycheck` — strict-parse + optional end-to-end verifier; non-zero exit on any annotated/malformed/failing line.

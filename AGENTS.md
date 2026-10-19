@@ -145,6 +145,7 @@ DAEMON_RETEST_INTERVAL=1800       # seconds before re-testing a working config
 DAEMON_MAX_LATENCY_MS=0           # reject configs slower than N ms (0 = disabled)
 DAEMON_PORT_BASE=10820            # first local SOCKS port for xray tests (set per instance)
 DAEMON_STABILITY_PROBES=2         # end-to-end verifications a config must pass (1 = single sample)
+DAEMON_MAX_XRAY_TESTS=1200        # cap on TCP survivors sent to the deep stages per cycle (0 = no cap)
 DAEMON_DOMAINS=https://...        # comma-separated full-depth content-check URLs
 DAEMON_DOMAIN_TIMEOUT=5           # seconds per domain fetch
 DAEMON_DOMAIN_QUORUM=2            # domains that must pass for the config to pass

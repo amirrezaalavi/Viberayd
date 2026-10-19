@@ -49,11 +49,15 @@ func TestLooksLikeBase64(t *testing.T) {
 	if !LooksLikeBase64("dGVzdA==") {
 		t.Error("expected base64-looking string to match")
 	}
+	// Unpadded payloads are common in real feeds and must be accepted.
+	if !LooksLikeBase64("dGVzdA") {
+		t.Error("unpadded base64 should match")
+	}
 	if LooksLikeBase64("hello world!") {
 		t.Error("plain text should not match")
 	}
-	if LooksLikeBase64("abc") { // length not divisible by 4
-		t.Error("bad length should not match")
+	if LooksLikeBase64("abcde") { // len%4 == 1 cannot be valid base64
+		t.Error("impossible base64 length should not match")
 	}
 }
 

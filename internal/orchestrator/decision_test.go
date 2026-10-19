@@ -16,10 +16,10 @@ func TestDecide_Depth(t *testing.T) {
 		wantDepth models.TestDepth
 	}{
 		{"empty", 0, 0, "", models.DepthQuick},
-		{"small no reality", 5, 0, "", models.DepthComprehensive},
-		{"small with reality", 5, 1, "", models.DepthComprehensive},
+		{"small no reality", 5, 0, "", models.DepthFull},
+		{"small with reality", 5, 1, "", models.DepthFull},
 		{"medium no reality", 50, 0, "", models.DepthFull},
-		{"medium with reality", 50, 2, "", models.DepthComprehensive},
+		{"medium with reality", 50, 2, "", models.DepthFull},
 		{"large no reality", 200, 0, "", models.DepthStandard},
 		{"large with reality", 200, 1, "", models.DepthFull},
 		{"huge", 1000, 0, "", models.DepthQuick},
@@ -181,8 +181,8 @@ func TestBumpDepth(t *testing.T) {
 	}{
 		{models.DepthQuick, models.DepthStandard},
 		{models.DepthStandard, models.DepthFull},
-		{models.DepthFull, models.DepthComprehensive},
-		{models.DepthComprehensive, models.DepthComprehensive},
+		{models.DepthFull, models.DepthFull},
+		{models.DepthComprehensive, models.DepthFull},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.in), func(t *testing.T) {

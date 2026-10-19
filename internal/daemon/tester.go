@@ -27,6 +27,12 @@ type XrayTestConfig struct {
 	Depth    models.TestDepth
 	XrayBin  string
 	PortBase int
+	// Full-depth domain content check (see tester.CheckDomains). Empty
+	// DomainURLs disables the domain stage (used by tests, not the daemon).
+	DomainURLs     []string
+	DomainTimeout  time.Duration
+	DomainMinBytes int64
+	DomainQuorum   int
 }
 
 func TCPPing(ctx context.Context, candidates map[string]models.ProxyConfig, timeout time.Duration) map[string]TCPResult {
@@ -84,6 +90,10 @@ func XrayTest(ctx context.Context, configs []NamedConfig, cfg XrayTestConfig) []
 	pipeline.ProtoTimeout = cfg.Timeout
 	pipeline.XrayTimeout = cfg.Timeout
 	pipeline.XrayBin = cfg.XrayBin
+	pipeline.DomainURLs = cfg.DomainURLs
+	pipeline.DomainTimeout = cfg.DomainTimeout
+	pipeline.DomainMinBytes = cfg.DomainMinBytes
+	pipeline.DomainQuorum = cfg.DomainQuorum
 
 	for _, item := range configs {
 		wg.Add(1)

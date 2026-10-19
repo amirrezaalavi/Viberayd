@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/amirrezaalavi/Viberayd/internal/models"
@@ -31,7 +32,16 @@ type DaemonConfig struct {
 	// It must differ between daemon instances sharing a host so two pools can
 	// never race for the same port.
 	PortBase int
+	// Full-depth domain content check (see tester.CheckDomains).
+	Domains          string // comma-separated URLs
+	DomainTimeoutSec int
+	DomainQuorum     int
+	DomainMinBytes   int
 }
+
+// DefaultDomains is the full-depth content-check set: large, independent,
+// geographically distributed endpoints.
+const DefaultDomains = "https://youtube.com,https://www.google.com,https://www.cloudflare.com"
 
 type HTTPConfig struct {
 	Enabled bool
@@ -54,6 +64,10 @@ func DefaultConfig() Config {
 			KeepSuccessful:    true,
 			RetestIntervalSec: 1800,
 			PortBase:          10820,
+			Domains:           DefaultDomains,
+			DomainTimeoutSec:  5,
+			DomainQuorum:      2,
+			DomainMinBytes:    4096,
 		},
 		HTTP: HTTPConfig{
 			Enabled: false,
@@ -97,6 +111,25 @@ func LoadConfigFromEnv() Config {
 	}
 
 	cfg.Daemon.Depth = env("DAEMON_DEPTH", cfg.Daemon.Depth)
+	cfg.Daemon.Domains = env("DAEMON_DOMAINS", cfg.Daemon.Domains)
+
+	if v, ok := os.LookupEnv("DAEMON_DOMAIN_TIMEOUT"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.DomainTimeoutSec = n
+		}
+	}
+
+	if v, ok := os.LookupEnv("DAEMON_DOMAIN_QUORUM"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.DomainQuorum = n
+		}
+	}
+
+	if v, ok := os.LookupEnv("DAEMON_DOMAIN_MIN_BYTES"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.DomainMinBytes = n
+		}
+	}
 
 	if v, ok := os.LookupEnv("DAEMON_KEEP_SUCCESSFUL"); ok {
 		cfg.Daemon.KeepSuccessful = v == "true" || v == "1" || v == "yes"
@@ -176,6 +209,40 @@ func validate(cfg *Config) {
 		slog.Warn("unknown depth, using standard", "provided", cfg.Daemon.Depth)
 		cfg.Daemon.Depth = "standard"
 	}
+	if depth == models.DepthComprehensive {
+		slog.Warn("depth comprehensive is deprecated, behaving as full", "provided", cfg.Daemon.Depth)
+	}
+	if cfg.Daemon.DomainTimeoutSec < 1 {
+		slog.Warn("domain timeout too low, setting to 1", "provided", cfg.Daemon.DomainTimeoutSec)
+		cfg.Daemon.DomainTimeoutSec = 1
+	}
+	if cfg.Daemon.DomainQuorum < 1 {
+		slog.Warn("domain quorum too low, setting to 1", "provided", cfg.Daemon.DomainQuorum)
+		cfg.Daemon.DomainQuorum = 1
+	}
+	if cfg.Daemon.DomainMinBytes < 1 {
+		slog.Warn("domain min bytes too low, setting to 1", "provided", cfg.Daemon.DomainMinBytes)
+		cfg.Daemon.DomainMinBytes = 1
+	}
+	if cfg.Daemon.Domains == "" {
+		slog.Warn("empty domain list, restoring defaults")
+		cfg.Daemon.Domains = DefaultDomains
+	}
+}
+
+// DomainList splits the configured comma-separated domain URLs, dropping
+// blanks. Never empty: validate restores defaults for a blank value.
+func (c *DaemonConfig) DomainList() []string {
+	var out []string
+	for _, d := range strings.Split(c.Domains, ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			out = append(out, d)
+		}
+	}
+	if len(out) == 0 {
+		return strings.Split(DefaultDomains, ",")
+	}
+	return out
 }
 
 func (c *DaemonConfig) Timeout() time.Duration {

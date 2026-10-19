@@ -32,11 +32,11 @@ type UserPreferences struct {
 //
 // Heuristics (overridden by any non-default UserPreferences field):
 //   - 0 configs          → defaults (quick, json, 1 worker)
-//   - 1–10 configs       → comprehensive depth
+//   - 1–10 configs       → full depth
 //   - 11–100 configs     → full depth
 //   - 101–500 configs    → standard depth
 //   - 500+ configs       → quick depth
-//   - Reality present    → bump depth by one level (capped at comprehensive)
+//   - Reality present    → bump depth by one level (capped at full)
 //   - Duplicates > 5%    → enable cache
 //   - Auto workers       → min(cpu*2, 100)
 //   - Auto timeout       → 5s (base), +2s if any Reality configs present
@@ -78,8 +78,6 @@ func decideDepth(ctx models.TestContext, override models.TestDepth) models.TestD
 
 	var depth models.TestDepth
 	switch {
-	case total <= 10:
-		depth = models.DepthComprehensive
 	case total <= 100:
 		depth = models.DepthFull
 	case total <= 500:
@@ -103,7 +101,7 @@ func bumpDepth(d models.TestDepth) models.TestDepth {
 	case models.DepthStandard:
 		return models.DepthFull
 	case models.DepthFull, models.DepthComprehensive:
-		return models.DepthComprehensive
+		return models.DepthFull
 	}
 	return d
 }

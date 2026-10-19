@@ -47,98 +47,50 @@ func NewXrayRunner(binPath string) *XrayRunner {
 }
 
 // TestXrayProxy starts an Xray instance with the given config, routes a test
-// HTTP request through its SOCKS inbound, and measures latency.
+// HTTP request through its SOCKS inbound, and measures latency. Success
+// requires a 2xx status: block pages (403) and errors prove nothing about
+// usable egress.
 func (xr *XrayRunner) TestXrayProxy(ctx context.Context, cfg models.ProxyConfig, socksPort int, timeout time.Duration) XrayResult {
 	if timeout == 0 {
 		timeout = 30 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
-	// Generate Xray JSON config
-	xrayCfg, err := buildXrayConfig(cfg, socksPort)
-	if err != nil {
-		return XrayResult{Success: false, Error: fmt.Sprintf("build config: %v", err)}
-	}
-
-	cfgPath := filepath.Join(xr.WorkDir, fmt.Sprintf("xray-%d.json", socksPort))
-	if xr.WorkDir == "" {
-		cfgPath = fmt.Sprintf("xray-%d.json", socksPort)
-	}
-	if err := writeJSONFile(cfgPath, xrayCfg); err != nil {
-		return XrayResult{Success: false, Error: fmt.Sprintf("write config: %v", err)}
-	}
-	defer os.Remove(cfgPath)
-
-	// Start xray process. Capture stderr so a refused/never-bound listener can
-	// be explained instead of surfacing as a bare "connection refused".
-	cmd := exec.CommandContext(ctx, xr.BinPath, "-c", cfgPath)
-	var stderr bytes.Buffer
-	cmd.Stdout = io.Discard
-	cmd.Stderr = &stderr
-
-	if err := cmd.Start(); err != nil {
-		return XrayResult{Success: false, Error: fmt.Sprintf("start xray: %v", err)}
-	}
-	// Ensure cleanup
-	go func() {
-		<-ctx.Done()
-		_ = cmd.Process.Kill()
-	}()
-
-	proxyAddr := "127.0.0.1:" + strconv.Itoa(socksPort)
-
-	// Wait for the SOCKS listener instead of sleeping a fixed 300ms: under
-	// parallel load xray can need longer to bind, and a fixed sleep makes the
-	// first request fail with "connection refused" — a false negative for a
-	// config that is perfectly usable.
-	if !waitForListener(ctx, proxyAddr, listenerWait) {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-		detail := tailText(stderr.String(), 300)
-		if detail == "" {
-			detail = "no stderr output"
-		}
-		return XrayResult{
-			Success: false,
-			Error:   fmt.Sprintf("xray never listened on %s: %s", proxyAddr, detail),
-		}
-	}
-
-	// Try each target while the process is still alive. Killing first and then
-	// retrying (the previous behaviour) guaranteed the fallback request hit a
-	// dead port and could never succeed.
 	var (
 		target  string
 		code    int
 		elapsed time.Duration
 		lastErr error
 	)
-	for _, tgt := range xr.TargetURLs {
-		target = tgt
-		start := time.Now()
-		c, err := testViaSOCKS5(proxyAddr, tgt, timeout)
-		elapsed = time.Since(start)
-		if err == nil && c >= 200 && c < 400 {
-			code, lastErr = c, nil
-			break
-		}
-		if err == nil {
-			lastErr = fmt.Errorf("unexpected HTTP status %d", c)
-		} else {
+
+	err := xr.withTempXray(ctx, cfg, socksPort, timeout, func(proxyAddr string) error {
+		// Try every target while xray is still alive. The old code killed the
+		// process first and then retried the fallback target against the dead
+		// port, so a config whose primary target failed could never pass on
+		// the fallback.
+		for _, tgt := range xr.TargetURLs {
+			target = tgt
+			start := time.Now()
+			c, err := testViaSOCKS5(proxyAddr, tgt, timeout)
+			elapsed = time.Since(start)
+			if err == nil {
+				if c >= 200 && c < 300 {
+					code = c
+					return nil
+				}
+				lastErr = fmt.Errorf("bad status %d", c)
+				continue
+			}
 			lastErr = err
 		}
-	}
-
-	_ = cmd.Process.Kill()
-	_ = cmd.Wait()
-
-	if lastErr != nil {
+		return lastErr
+	})
+	if err != nil {
 		return XrayResult{
-			Success: false,
-			Latency: elapsed,
-			Error:   fmt.Sprintf("proxy test: %v", lastErr),
-			Target:  target,
+			Success:  false,
+			Latency:  elapsed,
+			Error:    fmt.Sprintf("proxy test: %v", err),
+			Target:   target,
+			HTTPCode: code,
 		}
 	}
 
@@ -150,7 +102,7 @@ func (xr *XrayRunner) TestXrayProxy(ctx context.Context, cfg models.ProxyConfig,
 	}
 }
 
-// listenerWait bounds how long TestXrayProxy waits for the xray SOCKS inbound
+// listenerWait bounds how long withTempXray waits for the xray SOCKS inbound
 // to start accepting connections.
 const listenerWait = 5 * time.Second
 
@@ -179,6 +131,68 @@ func tailText(s string, n int) string {
 		return s
 	}
 	return "..." + s[len(s)-n:]
+}
+
+// withTempXray writes the xray config for cfg, spawns xray with a SOCKS5
+// inbound on socksPort, waits for it to bind, runs fn with the SOCKS address
+// ("127.0.0.1:port"), then kills xray and removes the config file. The whole
+// stay is bounded by timeout.
+func (xr *XrayRunner) withTempXray(ctx context.Context, cfg models.ProxyConfig, socksPort int, timeout time.Duration, fn func(proxyAddr string) error) error {
+	if timeout == 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// Generate Xray JSON config
+	xrayCfg, err := buildXrayConfig(cfg, socksPort)
+	if err != nil {
+		return fmt.Errorf("build config: %w", err)
+	}
+
+	cfgPath := filepath.Join(xr.WorkDir, fmt.Sprintf("xray-%d.json", socksPort))
+	if xr.WorkDir == "" {
+		cfgPath = fmt.Sprintf("xray-%d.json", socksPort)
+	}
+	if err := writeJSONFile(cfgPath, xrayCfg); err != nil {
+		return fmt.Errorf("write config: %w", err)
+	}
+	defer os.Remove(cfgPath)
+
+	// Start xray process. Capture stderr so a listener that never comes up can
+	// be explained instead of surfacing as a bare "connection refused".
+	cmd := exec.CommandContext(ctx, xr.BinPath, "-c", cfgPath)
+	var stderr bytes.Buffer
+	cmd.Stdout = io.Discard
+	cmd.Stderr = &stderr
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start xray: %w", err)
+	}
+	// Ensure cleanup
+	go func() {
+		<-ctx.Done()
+		_ = cmd.Process.Kill()
+	}()
+	defer func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}()
+
+	// Wait for the listener instead of sleeping a fixed 300ms: under parallel
+	// load xray can need longer to bind, and a fixed sleep makes the first
+	// request fail with "connection refused" — a false negative for a config
+	// that is perfectly usable.
+	proxyAddr := "127.0.0.1:" + strconv.Itoa(socksPort)
+	if !waitForListener(ctx, proxyAddr, listenerWait) {
+		detail := tailText(stderr.String(), 300)
+		if detail == "" {
+			detail = "no stderr output"
+		}
+		return fmt.Errorf("xray never listened on %s: %s", proxyAddr, detail)
+	}
+
+	return fn(proxyAddr)
 }
 
 // testViaSOCKS5 performs a real HTTP GET through a SOCKS5 proxy.

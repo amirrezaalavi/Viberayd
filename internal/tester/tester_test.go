@@ -46,8 +46,10 @@ func TestPipeline_DepthQuick(t *testing.T) {
 		},
 	}
 	res := p.Run(context.Background(), cfg, 10820)
-	if res.Stage != models.StageCompleted && res.Stage != models.StageTCP {
-		t.Errorf("expected quick to stop after TCP, got stage %s", res.Stage)
+	// New ladder: quick runs TCP + TLS + protocol (SS has no TLS stage) and
+	// completes without spawning xray.
+	if res.Stage != models.StageCompleted {
+		t.Errorf("expected quick to complete cheap stages, got stage %s (errors %v)", res.Stage, res.Errors)
 	}
 }
 
@@ -64,7 +66,8 @@ func TestPipeline_DepthStandard_NonTLS(t *testing.T) {
 		},
 	}
 	res := p.Run(context.Background(), cfg, 10820)
-	// SS has no TLS, so standard should complete after TCP (TLS skipped)
+	// SS has no TLS; standard proceeds through protocol to the xray
+	// real-delay stage (which needs a real xray binary + working proxy).
 	if res.Status == models.StatusError {
 		t.Logf("Result: %+v", res)
 	}

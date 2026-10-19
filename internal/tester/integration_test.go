@@ -189,13 +189,14 @@ func TestPipeline_TLSHandshakeFail(t *testing.T) {
 	}
 }
 
-// TestIntegrationPipeline_DepthQuick verifies that depth=quick only runs TCP and
-// does NOT attempt TLS or protocol stages.
+// TestIntegrationPipeline_DepthQuick verifies that depth=quick runs the
+// cheap stages (TCP + TLS + protocol) and does NOT spawn xray.
 func TestIntegrationPipeline_DepthQuick(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
-	// Use an actual TLS server to verify depth=quick skips TLS
+	// Quick covers TCP + TLS + protocol but never spawns xray: use a TLS
+	// listener so all three cheap stages can genuinely pass.
 	ln := startTLSListener(t)
 	addr := ln.Addr().(*net.TCPAddr)
 
@@ -210,9 +211,9 @@ func TestIntegrationPipeline_DepthQuick(t *testing.T) {
 	if res.Stage != models.StageCompleted {
 		t.Fatalf("expected StageCompleted after quick depth, got %q", res.Stage)
 	}
-	// TLS latency should be zero because TLS stage was never attempted
-	if res.Latencies.TLS != 0 {
-		t.Error("expected zero TLS latency for quick depth")
+	// TLS stage must have been attempted (new ladder: quick includes TLS).
+	if res.Latencies.TLS == 0 {
+		t.Error("expected nonzero TLS latency for quick depth")
 	}
 }
 

@@ -27,20 +27,23 @@ Each configuration is tested sequentially. It stops immediately at the depth lim
 
 | Depth Level | Stages Run | Validation Goals |
 |---|---|---|
-| `quick` | **TCP** | Baseline network connectivity, port accessibility, and latency. |
-| `standard` | **TCP + TLS** | Quick + certificates, ALPN, cipher suites, SNI, and TLS handshake latency. |
-| `full` | **TCP + TLS + Protocol** | Standard + light protocol payload checks and parameter/cipher validations. |
-| `comprehensive` | **TCP + TLS + Protocol + Proxy** | Full + launching xray-core locally, routing standard SOCKS5 requests through the proxy backend to verify authentic end-to-end data delivery. |
+| `quick` | **TCP + TLS + Protocol** | Connectivity, TLS handshake, and light protocol checks — no subprocess spawned. |
+| `standard` | **Quick + Xray proxy** | Plus a real HTTP request through a temporary xray SOCKS inbound; a **2xx** status is required (block pages and errors prove nothing). |
+| `full` | **Standard + Domain content check** | Plus `CheckDomains`: fetch several independent domains through the proxy and require a quorum to return 2xx with at least `DomainMinBytes` of body. |
+| `comprehensive` | alias of `full` | Normalized to `full`; kept so existing deployments and env files keep working. |
+
+A config is only marked `working` after the xray stage; `quick` never marks a
+config working end-to-end and is intended for fast reachability sweeps.
 
 ---
 
 ## Xray Process Routing (`xray.go`)
 
-At `comprehensive` depth, Viberay does a real proxy handshake:
-1. Generates a custom xray JSON configuration using `xray_config.go` with a SOCKS5 inbound routing to the selected proxy outbound.
-2. Starts `xray` using the path defined by the `-xray-bin` flag.
-3. Performs a SOCKS5 protocol greeting (`testViaSOCKS5`) on the local loopback port.
-4. Cleans up the background process and temporary JSON configuration files.
+Every depth that needs a real tunnel does a real proxied HTTP request:
+1. Generates a custom xray JSON configuration using `xray_config.go` with a SOCKS5 inbound routing to the selected proxy outbound (`withTempXray`).
+2. Starts `xray` and **polls the SOCKS listener** (up to `listenerWait`, 5s) instead of sleeping a fixed 300ms — a fixed sleep races under parallel load and produces "connection refused" false negatives.
+3. Requests each target URL in turn while the process is alive; success requires a 2xx.
+4. Cleans up the background process and the temporary JSON configuration file. If the listener never comes up, the captured xray stderr is included in the error.
 
 ---
 
@@ -54,6 +57,6 @@ The `ResilientRunner` handles transient network interruptions:
 
 ## Conventions & Gotchas
 
-- **SOCKS5 Greeting limit:** The `testViaSOCKS5` method checks the SOCKS5 greeting/greeting handshakes to ensure authentication works, but does not execute a full HTTP GET query. This avoids importing third-party network libraries.
+- **Real HTTP, not a greeting:** `testViaSOCKS5` issues a full `http.Client` GET through the SOCKS5 proxy and requires a 2xx — a bare SOCKS greeting is not treated as proof of working egress.
 - **Sorting Priorities:** Configs are sorted using `ConfigPriority()` (Reality > VMess > VLess > Trojan > SS) to test high-signal, secure configs first.
-- **Port Manager Dependency:** In `comprehensive` testing, a unique local SOCKS5 port must be acquired from the `PortManager` before initiating the Xray subprocess.
+- **Port Manager Dependency:** Every depth that spawns xray acquires a unique local SOCKS5 port from the `PortManager` before starting the subprocess.

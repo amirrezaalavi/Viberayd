@@ -29,8 +29,14 @@ Each configuration is tested sequentially. It stops immediately at the depth lim
 |---|---|---|
 | `quick` | **TCP + TLS + Protocol** | Connectivity, TLS handshake, and light protocol checks — no subprocess spawned. |
 | `standard` | **Quick + Xray proxy** | Plus a real HTTP request through a temporary xray SOCKS inbound; a **2xx** status is required (block pages and errors prove nothing). |
-| `full` | **Standard + Domain content check** | Plus `CheckDomains`: fetch several independent domains through the proxy and require a quorum to return 2xx with at least `DomainMinBytes` of body. |
+| `full` | **Standard + Domain content check + Stability** | Plus `CheckDomains` (quorum of domains returning 2xx with `DomainMinBytes`), then `StabilityProbes` independent end-to-end verifications. |
 | `comprehensive` | alias of `full` | Normalized to `full`; kept so existing deployments and env files keep working. |
+
+**Stability stage.** A single passing sample is not evidence of a usable
+tunnel: re-checking the served set three times showed 36% of links failing at
+least one run. After the depth-specific stages pass, `StabilityProbes-1`
+additional full verifications run (`StageStability`) and any failure rejects
+the config. `StabilityProbes=1` disables the gate.
 
 A config is only marked `working` after the xray stage; `quick` never marks a
 config working end-to-end and is intended for fast reachability sweeps.

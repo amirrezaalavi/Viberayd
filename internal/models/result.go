@@ -12,6 +12,7 @@ const (
 	StageProtocol  = "protocol"
 	StageProxy     = "proxy"
 	StageDomain    = "domain"
+	StageStability = "stability"
 	StageCompleted = "completed"
 )
 
@@ -43,17 +44,17 @@ type TestMetrics struct {
 
 // TestResult captures the outcome of testing a single configuration.
 type TestResult struct {
-	ID        string             `json:"id" yaml:"id"`                              // unique per-config identifier
-	Config    ProxyConfig        `json:"config" yaml:"config"`
-	Status    TestStatus         `json:"status" yaml:"status"`
-	Stage     string             `json:"stage" yaml:"stage"`                        // last stage attempted
-	Latencies LatencyBreakdown   `json:"latencies" yaml:"latencies"`
-	Errors    []string           `json:"errors,omitempty" yaml:"errors,omitempty"`
-	Metrics   TestMetrics        `json:"metrics,omitempty" yaml:"metrics,omitempty"`
-	Timestamp time.Time          `json:"timestamp" yaml:"timestamp"`
-	TestID    string             `json:"test_id" yaml:"test_id"`                    // run-level identifier
-	PortUsed  int                `json:"port_used,omitempty" yaml:"port_used,omitempty"`
-	Retries   int                `json:"retries,omitempty" yaml:"retries,omitempty"`
+	ID        string           `json:"id" yaml:"id"` // unique per-config identifier
+	Config    ProxyConfig      `json:"config" yaml:"config"`
+	Status    TestStatus       `json:"status" yaml:"status"`
+	Stage     string           `json:"stage" yaml:"stage"` // last stage attempted
+	Latencies LatencyBreakdown `json:"latencies" yaml:"latencies"`
+	Errors    []string         `json:"errors,omitempty" yaml:"errors,omitempty"`
+	Metrics   TestMetrics      `json:"metrics,omitempty" yaml:"metrics,omitempty"`
+	Timestamp time.Time        `json:"timestamp" yaml:"timestamp"`
+	TestID    string           `json:"test_id" yaml:"test_id"` // run-level identifier
+	PortUsed  int              `json:"port_used,omitempty" yaml:"port_used,omitempty"`
+	Retries   int              `json:"retries,omitempty" yaml:"retries,omitempty"`
 }
 
 // Summary aggregates results across an entire test run.

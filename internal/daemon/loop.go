@@ -179,15 +179,16 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 	var xrayResults []TestResult
 	if len(survivors) > 0 {
 		xrayResults = XrayTest(ctx, survivors, XrayTestConfig{
-			Parallel:       d.Config.Daemon.Parallel,
-			Timeout:        timeout,
-			Depth:          d.Config.Daemon.TestDepth(),
-			XrayBin:        "xray",
-			PortBase:       d.Config.Daemon.PortBase,
-			DomainURLs:     d.Config.Daemon.DomainList(),
-			DomainTimeout:  time.Duration(d.Config.Daemon.DomainTimeoutSec) * time.Second,
-			DomainMinBytes: int64(d.Config.Daemon.DomainMinBytes),
-			DomainQuorum:   d.Config.Daemon.DomainQuorum,
+			Parallel:        d.Config.Daemon.Parallel,
+			Timeout:         timeout,
+			Depth:           d.Config.Daemon.TestDepth(),
+			XrayBin:         "xray",
+			PortBase:        d.Config.Daemon.PortBase,
+			DomainURLs:      d.Config.Daemon.DomainList(),
+			DomainTimeout:   time.Duration(d.Config.Daemon.DomainTimeoutSec) * time.Second,
+			DomainMinBytes:  int64(d.Config.Daemon.DomainMinBytes),
+			DomainQuorum:    d.Config.Daemon.DomainQuorum,
+			StabilityProbes: d.Config.Daemon.StabilityProbes,
 		})
 	}
 

@@ -310,6 +310,32 @@ func TestConfigString(t *testing.T) {
 	}
 }
 
+func TestStabilityProbesConfig(t *testing.T) {
+	if got := DefaultConfig().Daemon.StabilityProbes; got != 2 {
+		t.Errorf("default StabilityProbes = %d, want 2", got)
+	}
+
+	t.Setenv("DAEMON_STABILITY_PROBES", "3")
+	if got := LoadConfigFromEnv().Daemon.StabilityProbes; got != 3 {
+		t.Errorf("StabilityProbes from env = %d, want 3", got)
+	}
+
+	// 0 would disable the gate silently; clamp to a single sample instead.
+	t.Setenv("DAEMON_STABILITY_PROBES", "0")
+	if got := LoadConfigFromEnv().Daemon.StabilityProbes; got != 1 {
+		t.Errorf("StabilityProbes=0 clamped to %d, want 1", got)
+	}
+
+	t.Setenv("DAEMON_STABILITY_PROBES", "99")
+	if got := LoadConfigFromEnv().Daemon.StabilityProbes; got != 10 {
+		t.Errorf("StabilityProbes=99 clamped to %d, want 10", got)
+	}
+
+	if s := DefaultConfig().String(); !strings.Contains(s, "stability_probes=2") {
+		t.Errorf("String() should report the probe count: %s", s)
+	}
+}
+
 func TestPortBaseConfig(t *testing.T) {
 	if got := DefaultConfig().Daemon.PortBase; got != 10820 {
 		t.Errorf("default PortBase = %d, want 10820", got)

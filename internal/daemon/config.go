@@ -37,6 +37,11 @@ type DaemonConfig struct {
 	DomainTimeoutSec int
 	DomainQuorum     int
 	DomainMinBytes   int
+	// StabilityProbes is how many independent end-to-end verifications a
+	// config must pass before it is reported as working. 1 = the old
+	// single-sample behaviour; 2 is the default so a node that fails most
+	// attempts never reaches working.txt.
+	StabilityProbes int
 }
 
 // DefaultDomains is the full-depth content-check set: large, independent,
@@ -68,6 +73,7 @@ func DefaultConfig() Config {
 			DomainTimeoutSec:  5,
 			DomainQuorum:      2,
 			DomainMinBytes:    4096,
+			StabilityProbes:   2,
 		},
 		HTTP: HTTPConfig{
 			Enabled: false,
@@ -128,6 +134,12 @@ func LoadConfigFromEnv() Config {
 	if v, ok := os.LookupEnv("DAEMON_DOMAIN_MIN_BYTES"); ok {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Daemon.DomainMinBytes = n
+		}
+	}
+
+	if v, ok := os.LookupEnv("DAEMON_STABILITY_PROBES"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Daemon.StabilityProbes = n
 		}
 	}
 
@@ -228,6 +240,14 @@ func validate(cfg *Config) {
 		slog.Warn("empty domain list, restoring defaults")
 		cfg.Daemon.Domains = DefaultDomains
 	}
+	if cfg.Daemon.StabilityProbes < 1 {
+		slog.Warn("stability probes too low, setting to 1 (single sample)", "provided", cfg.Daemon.StabilityProbes)
+		cfg.Daemon.StabilityProbes = 1
+	}
+	if cfg.Daemon.StabilityProbes > 10 {
+		slog.Warn("stability probes too high, clamping to 10", "provided", cfg.Daemon.StabilityProbes)
+		cfg.Daemon.StabilityProbes = 10
+	}
 }
 
 // DomainList splits the configured comma-separated domain URLs, dropping
@@ -263,7 +283,7 @@ func (c *DaemonConfig) TestDepth() models.TestDepth {
 
 func (c Config) String() string {
 	return fmt.Sprintf(
-		"urls=%s output=%s state=%s sleep=%ds parallel=%d timeout=%ds depth=%s keep_ok=%v retest_interval=%ds max_latency_ms=%d port_base=%d http_enabled=%v http_port=%d sub_path=%s api_port=%d",
+		"urls=%s output=%s state=%s sleep=%ds parallel=%d timeout=%ds depth=%s keep_ok=%v retest_interval=%ds max_latency_ms=%d port_base=%d stability_probes=%d http_enabled=%v http_port=%d sub_path=%s api_port=%d",
 		c.Daemon.URLsFile,
 		c.Daemon.OutputFile,
 		c.Daemon.StateFile,
@@ -275,6 +295,7 @@ func (c Config) String() string {
 		c.Daemon.RetestIntervalSec,
 		c.Daemon.MaxLatencyMs,
 		c.Daemon.PortBase,
+		c.Daemon.StabilityProbes,
 		c.HTTP.Enabled,
 		c.HTTP.Port,
 		c.HTTP.SubPath,

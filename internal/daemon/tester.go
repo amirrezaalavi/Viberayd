@@ -33,6 +33,9 @@ type XrayTestConfig struct {
 	DomainTimeout  time.Duration
 	DomainMinBytes int64
 	DomainQuorum   int
+	// StabilityProbes is how many independent end-to-end verifications a
+	// config must pass. 1 (or 0) keeps the single-sample behaviour.
+	StabilityProbes int
 }
 
 func TCPPing(ctx context.Context, candidates map[string]models.ProxyConfig, timeout time.Duration) map[string]TCPResult {
@@ -94,6 +97,7 @@ func XrayTest(ctx context.Context, configs []NamedConfig, cfg XrayTestConfig) []
 	pipeline.DomainTimeout = cfg.DomainTimeout
 	pipeline.DomainMinBytes = cfg.DomainMinBytes
 	pipeline.DomainQuorum = cfg.DomainQuorum
+	pipeline.StabilityProbes = cfg.StabilityProbes
 
 	for _, item := range configs {
 		wg.Add(1)

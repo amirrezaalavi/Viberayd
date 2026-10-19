@@ -23,6 +23,12 @@ type Pipeline struct {
 	DomainTimeout  time.Duration
 	DomainMinBytes int64
 	DomainQuorum   int
+	// StabilityProbes is how many independent end-to-end verifications a
+	// config must pass before it is reported as working. A single sample
+	// admits nodes that fail most attempts (measured: 36% of a served set
+	// failed at least one of three re-checks), which is the false-positive
+	// problem. Values < 1 are treated as 1.
+	StabilityProbes int
 }
 
 // NewPipeline creates a pipeline with defaults.
@@ -43,6 +49,9 @@ func NewPipeline(depth models.TestDepth) *Pipeline {
 		DomainTimeout:  5 * time.Second,
 		DomainMinBytes: 4096,
 		DomainQuorum:   2,
+		// Two independent end-to-end verifications by default: one flaky
+		// sample is not evidence of a usable tunnel.
+		StabilityProbes: 2,
 	}
 }
 
@@ -137,9 +146,59 @@ func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) mo
 		return res
 	}
 
+	// Stage 6: stability. Repeat the full end-to-end verification; a node that
+	// passes once and fails on a repeat is not a usable tunnel. Measured on the
+	// served set: 36% of links failed at least one of three independent
+	// re-checks, so a single sample is not evidence of a working config.
+	res.Stage = models.StageStability
+	if err := runStabilityProbes(p.StabilityProbes, func() error {
+		return p.verifyEndToEnd(ctx, cfg, port, depth)
+	}); err != nil {
+		res.Status = models.StatusFailed
+		res.Errors = append(res.Errors, err.Error())
+		return res
+	}
+
 	res.Stage = models.StageCompleted
 	res.Latencies.Total = time.Since(res.Timestamp)
 	return res
+}
+
+// runStabilityProbes runs the extra end-to-end verifications. The first
+// verification was already performed by the caller, so probes=2 runs verify
+// once more and probes<=1 runs it not at all. Any failure fails the config.
+func runStabilityProbes(probes int, verify func() error) error {
+	if probes < 1 {
+		probes = 1
+	}
+	for probe := 2; probe <= probes; probe++ {
+		if err := verify(); err != nil {
+			return fmt.Errorf("stability probe %d/%d: %w", probe, probes, err)
+		}
+	}
+	return nil
+}
+
+// verifyEndToEnd performs one complete end-to-end verification: a proxied HTTP
+// request that must return 2xx, plus the multi-domain content check when the
+// depth enables it. It is used by the stability stage, which repeats it.
+func (p *Pipeline) verifyEndToEnd(ctx context.Context, cfg models.ProxyConfig, port int, depth models.TestDepth) error {
+	xr := NewXrayRunner(p.XrayBin)
+	xrayRes := xr.TestXrayProxy(ctx, cfg, port, p.XrayTimeout)
+	if !xrayRes.Success {
+		return fmt.Errorf("proxy test: %s", xrayRes.Error)
+	}
+	if depth != models.DepthFull || len(p.DomainURLs) == 0 {
+		return nil
+	}
+	return xr.withTempXray(ctx, cfg, port, p.XrayTimeout, func(proxyAddr string) error {
+		domRes := CheckDomains(ctx, proxyAddr, p.DomainURLs, p.DomainTimeout, p.DomainMinBytes, p.DomainQuorum)
+		if !domRes.Passed {
+			return fmt.Errorf("domain check: %d/%d passed (quorum %d)",
+				domRes.PassedCount, domRes.Checked, p.DomainQuorum)
+		}
+		return nil
+	})
 }
 
 // needsTLS reports whether cfg has TLS enabled.

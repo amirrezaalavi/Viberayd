@@ -9,6 +9,18 @@ import (
 	"github.com/amirrezaalavi/Viberayd/internal/models"
 )
 
+// xrayRunner is the part of the pipeline that needs a real tunnel. It is an
+// interface so the depth and stability logic can be driven by tests without
+// spawning xray.
+type xrayRunner interface {
+	TestXrayProxy(ctx context.Context, cfg models.ProxyConfig, socksPort int, timeout time.Duration) XrayResult
+	withTempXray(ctx context.Context, cfg models.ProxyConfig, port int, timeout time.Duration, fn func(proxyAddr string) error) error
+}
+
+// newXrayRunner builds the runner for one stage. It is a variable so tests
+// can inject a fake that counts the end-to-end verifications.
+var newXrayRunner = func(binPath string) xrayRunner { return NewXrayRunner(binPath) }
+
 // Pipeline runs the testing stages for a single config according to the chosen depth.
 type Pipeline struct {
 	Depth        models.TestDepth
@@ -163,7 +175,7 @@ func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) (r
 
 	// Stage 4: Xray real-delay test (standard and full)
 	res.Stage = models.StageProxy
-	xr := NewXrayRunner(p.XrayBin)
+	xr := newXrayRunner(p.XrayBin)
 	xrayRes := xr.TestXrayProxy(ctx, cfg, port, p.XrayTimeout)
 	res.Latencies.Response = xrayRes.Latency
 	if !xrayRes.Success {
@@ -175,29 +187,31 @@ func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) (r
 	// those passes is the config's latency.
 	endToEnd := []time.Duration{xrayRes.Latency}
 
-	if depth == models.DepthStandard || len(p.DomainURLs) == 0 {
-		res.Stage = models.StageCompleted
-		res.Latencies.Response = medianDuration(endToEnd)
-		return res
-	}
-
-	// Stage 5: multi-domain content check (full only, skipped when no
-	// domains configured). The xray instance from stage 4 is already gone,
-	// so check inside a fresh temp xray.
-	res.Stage = models.StageDomain
-	var domRes DomainResult
-	domErr := xr.withTempXray(ctx, cfg, port, p.XrayTimeout, func(proxyAddr string) error {
-		domRes = CheckDomains(ctx, proxyAddr, p.DomainURLs, p.DomainTimeout, p.DomainMinBytes, p.DomainQuorum)
-		if !domRes.Passed {
-			return fmt.Errorf("domain check: %d/%d passed (quorum %d)",
-				domRes.PassedCount, domRes.Checked, p.DomainQuorum)
+	// Stage 5: multi-domain content check (FULL depth only, skipped when no
+	// domains are configured). The xray instance from stage 4 is already
+	// gone, so check inside a fresh temp xray.
+	//
+	// The stability stage below is NOT part of this depth gate: it used to
+	// be, which left the DEFAULT depth (standard) with no repeat
+	// verification at all — DAEMON_STABILITY_PROBES silently did nothing
+	// there, and one sample is exactly the false-positive generator the
+	// gate exists to remove.
+	if depth == models.DepthFull && len(p.DomainURLs) > 0 {
+		res.Stage = models.StageDomain
+		var domRes DomainResult
+		domErr := xr.withTempXray(ctx, cfg, port, p.XrayTimeout, func(proxyAddr string) error {
+			domRes = CheckDomains(ctx, proxyAddr, p.DomainURLs, p.DomainTimeout, p.DomainMinBytes, p.DomainQuorum)
+			if !domRes.Passed {
+				return fmt.Errorf("domain check: %d/%d passed (quorum %d)",
+					domRes.PassedCount, domRes.Checked, p.DomainQuorum)
+			}
+			return nil
+		})
+		if domErr != nil {
+			res.Status = models.StatusFailed
+			res.Errors = append(res.Errors, domErr.Error())
+			return res
 		}
-		return nil
-	})
-	if domErr != nil {
-		res.Status = models.StatusFailed
-		res.Errors = append(res.Errors, domErr.Error())
-		return res
 	}
 
 	// Stage 6: stability. Repeat the full end-to-end verification; a node that
@@ -262,7 +276,7 @@ func medianDuration(samples []time.Duration) time.Duration {
 // depth enables it. It is used by the stability stage, which repeats it. The
 // returned duration is the latency of the proxied request.
 func (p *Pipeline) verifyEndToEnd(ctx context.Context, cfg models.ProxyConfig, port int, depth models.TestDepth) (time.Duration, error) {
-	xr := NewXrayRunner(p.XrayBin)
+	xr := newXrayRunner(p.XrayBin)
 	xrayRes := xr.TestXrayProxy(ctx, cfg, port, p.XrayTimeout)
 	if !xrayRes.Success {
 		return xrayRes.Latency, fmt.Errorf("proxy test: %s", xrayRes.Error)

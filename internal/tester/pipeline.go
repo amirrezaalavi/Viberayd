@@ -3,6 +3,7 @@ package tester
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/amirrezaalavi/Viberayd/internal/models"
@@ -102,9 +103,14 @@ func (p *Pipeline) normalizedDepth() models.TestDepth {
 //
 // When StabilityProbes > 1, every depth that reached StageProxy repeats the
 // end-to-end verification at StageStability before reporting success.
-func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) models.TestResult {
+//
+// Latencies.Response is the MEDIAN of the end-to-end (proxied request)
+// passes: that is the number a user feels, and it is what the served list is
+// ordered by. Latencies.Total is the duration of the whole test run (every
+// stage, every probe) and says nothing about the tunnel's speed.
+func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) (res models.TestResult) {
 	depth := p.normalizedDepth()
-	res := models.TestResult{
+	res = models.TestResult{
 		ID:        fmt.Sprintf("%s-%s", cfg.Protocol(), cfg.Addr()),
 		Config:    cfg,
 		Status:    models.StatusSuccess,
@@ -112,6 +118,11 @@ func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) mo
 		Timestamp: time.Now(),
 		PortUsed:  port,
 	}
+	defer func() {
+		// Total is the wall time of the whole run, on every exit path
+		// (the early returns below used to leave it unset).
+		res.Latencies.Total = time.Since(res.Timestamp)
+	}()
 
 	// Stage 1: TCP
 	tcpRes := TestTCPForConfig(ctx, cfg, p.TCPTimeout)
@@ -160,9 +171,13 @@ func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) mo
 		res.Errors = append(res.Errors, xrayRes.Error)
 		return res
 	}
+	// Every end-to-end pass measures the proxied request; the median of
+	// those passes is the config's latency.
+	endToEnd := []time.Duration{xrayRes.Latency}
 
 	if depth == models.DepthStandard || len(p.DomainURLs) == 0 {
 		res.Stage = models.StageCompleted
+		res.Latencies.Response = medianDuration(endToEnd)
 		return res
 	}
 
@@ -190,47 +205,72 @@ func (p *Pipeline) Run(ctx context.Context, cfg models.ProxyConfig, port int) mo
 	// served set: 36% of links failed at least one of three independent
 	// re-checks, so a single sample is not evidence of a working config.
 	res.Stage = models.StageStability
-	if err := runStabilityProbes(p.StabilityProbes, func() error {
+	probeLatencies, err := runStabilityProbes(p.StabilityProbes, func() (time.Duration, error) {
 		return p.verifyEndToEnd(ctx, cfg, port, depth)
-	}); err != nil {
+	})
+	if err != nil {
 		res.Status = models.StatusFailed
 		res.Errors = append(res.Errors, err.Error())
 		return res
 	}
+	endToEnd = append(endToEnd, probeLatencies...)
 
 	res.Stage = models.StageCompleted
-	res.Latencies.Total = time.Since(res.Timestamp)
+	res.Latencies.Response = medianDuration(endToEnd)
 	return res
 }
 
-// runStabilityProbes runs the extra end-to-end verifications. The first
-// verification was already performed by the caller, so probes=2 runs verify
-// once more and probes<=1 runs it not at all. Any failure fails the config.
-func runStabilityProbes(probes int, verify func() error) error {
+// runStabilityProbes runs the extra end-to-end verifications and returns the
+// latency each pass measured. The first verification was already performed by
+// the caller, so probes=2 runs verify once more and probes<=1 runs it not at
+// all. Any failure fails the config.
+func runStabilityProbes(probes int, verify func() (time.Duration, error)) ([]time.Duration, error) {
 	if probes < 1 {
 		probes = 1
 	}
+	latencies := make([]time.Duration, 0, probes-1)
 	for probe := 2; probe <= probes; probe++ {
-		if err := verify(); err != nil {
-			return fmt.Errorf("stability probe %d/%d: %w", probe, probes, err)
+		lat, err := verify()
+		if err != nil {
+			return latencies, fmt.Errorf("stability probe %d/%d: %w", probe, probes, err)
 		}
+		latencies = append(latencies, lat)
 	}
-	return nil
+	return latencies, nil
+}
+
+// medianDuration returns the median of the samples (0 when there are none).
+// With an even number of samples the two middle values are averaged, so a
+// single lucky fast pass does not outrank a consistently slow tunnel and a
+// single slow pass does not condemn a fast one.
+func medianDuration(samples []time.Duration) time.Duration {
+	if len(samples) == 0 {
+		return 0
+	}
+	sorted := make([]time.Duration, len(samples))
+	copy(sorted, samples)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	mid := len(sorted) / 2
+	if len(sorted)%2 == 1 {
+		return sorted[mid]
+	}
+	return (sorted[mid-1] + sorted[mid]) / 2
 }
 
 // verifyEndToEnd performs one complete end-to-end verification: a proxied HTTP
 // request that must return 2xx, plus the multi-domain content check when the
-// depth enables it. It is used by the stability stage, which repeats it.
-func (p *Pipeline) verifyEndToEnd(ctx context.Context, cfg models.ProxyConfig, port int, depth models.TestDepth) error {
+// depth enables it. It is used by the stability stage, which repeats it. The
+// returned duration is the latency of the proxied request.
+func (p *Pipeline) verifyEndToEnd(ctx context.Context, cfg models.ProxyConfig, port int, depth models.TestDepth) (time.Duration, error) {
 	xr := NewXrayRunner(p.XrayBin)
 	xrayRes := xr.TestXrayProxy(ctx, cfg, port, p.XrayTimeout)
 	if !xrayRes.Success {
-		return fmt.Errorf("proxy test: %s", xrayRes.Error)
+		return xrayRes.Latency, fmt.Errorf("proxy test: %s", xrayRes.Error)
 	}
 	if depth != models.DepthFull || len(p.DomainURLs) == 0 {
-		return nil
+		return xrayRes.Latency, nil
 	}
-	return xr.withTempXray(ctx, cfg, port, p.XrayTimeout, func(proxyAddr string) error {
+	err := xr.withTempXray(ctx, cfg, port, p.XrayTimeout, func(proxyAddr string) error {
 		domRes := CheckDomains(ctx, proxyAddr, p.DomainURLs, p.DomainTimeout, p.DomainMinBytes, p.DomainQuorum)
 		if !domRes.Passed {
 			return fmt.Errorf("domain check: %d/%d passed (quorum %d)",
@@ -238,6 +278,7 @@ func (p *Pipeline) verifyEndToEnd(ctx context.Context, cfg models.ProxyConfig, p
 		}
 		return nil
 	})
+	return xrayRes.Latency, err
 }
 
 // needsTLS reports whether cfg has TLS enabled.

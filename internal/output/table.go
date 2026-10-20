@@ -17,10 +17,7 @@ func (f *TableFormatter) Format(w io.Writer, results []models.TestResult, summar
 			continue
 		}
 
-		latency := r.Latencies.Total
-		if latency == 0 {
-			latency = r.Latencies.Connect
-		}
+		latency := r.Latencies.EffectiveLatency()
 
 		fmt.Fprintf(w, "%s %s\n", r.Config.Raw, latency.Round(time.Millisecond))
 	}

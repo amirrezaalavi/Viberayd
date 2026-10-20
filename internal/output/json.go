@@ -26,10 +26,7 @@ func (f *JSONFormatter) Format(w io.Writer, results []models.TestResult, summary
 		if r.Status != models.StatusSuccess {
 			continue
 		}
-		latency := r.Latencies.Total
-		if latency == 0 {
-			latency = r.Latencies.Connect
-		}
+		latency := r.Latencies.EffectiveLatency()
 		out.Results = append(out.Results, jsonResult{
 			URI:     r.Config.Raw,
 			Latency: latency.Round(time.Millisecond).String(),

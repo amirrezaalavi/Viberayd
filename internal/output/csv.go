@@ -20,10 +20,7 @@ func (f *CSVFormatter) Format(w io.Writer, results []models.TestResult, summary 
 			continue
 		}
 
-		latency := r.Latencies.Total
-		if latency == 0 {
-			latency = r.Latencies.Connect
-		}
+		latency := r.Latencies.EffectiveLatency()
 
 		row := []string{r.Config.Raw, latency.Round(time.Millisecond).String()}
 		if err := cw.Write(row); err != nil {

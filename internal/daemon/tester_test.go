@@ -218,3 +218,42 @@ func atoi(s string) int {
 	}
 	return n
 }
+
+// TestResultLatencyMs pins the definition of the latency the daemon records
+// and orders the served list by: the measured end-to-end latency, NOT the
+// total duration of the test run.
+func TestResultLatencyMs(t *testing.T) {
+	cases := []struct {
+		name string
+		res  models.TestResult
+		want int
+	}{
+		{
+			name: "response latency wins over the total run duration",
+			res: models.TestResult{Latencies: models.LatencyBreakdown{
+				Response: 420 * time.Millisecond,
+				Total:    12 * time.Second,
+			}},
+			want: 420,
+		},
+		{
+			name: "falls back to the total when no response was measured",
+			res: models.TestResult{Latencies: models.LatencyBreakdown{
+				Total: 9 * time.Second,
+			}},
+			want: 9000,
+		},
+		{
+			name: "no measurement at all",
+			res:  models.TestResult{},
+			want: 0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resultLatencyMs(tc.res); got != tc.want {
+				t.Errorf("resultLatencyMs = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}

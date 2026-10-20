@@ -21,10 +21,7 @@ func (f *MarkdownFormatter) Format(w io.Writer, results []models.TestResult, sum
 		if r.Status != models.StatusSuccess {
 			continue
 		}
-		latency := r.Latencies.Total
-		if latency == 0 {
-			latency = r.Latencies.Connect
-		}
+		latency := r.Latencies.EffectiveLatency()
 		fmt.Fprintf(w, "| `%s` | %s |\n", r.Config.Raw, latency.Round(time.Millisecond))
 	}
 

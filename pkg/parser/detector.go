@@ -81,17 +81,21 @@ func IsBase64Encoded(s string) bool {
 // LooksLikeBase64 reports whether s appears to be base64-encoded.
 // Deprecated: Use IsBase64Encoded instead, which handles whitespace and uses
 // the colon-absence heuristic for better accuracy.
+//
+// Unpadded payloads are accepted (len%4 == 2 or 3): real feeds emit them, and
+// rejecting them here made ss links with base64 userinfo fall through to the
+// plain-text path and fail. A length of len%4 == 1 can never be valid base64.
 func LooksLikeBase64(s string) bool {
-	if len(s) == 0 || len(s)%4 != 0 {
+	if len(s) == 0 || len(s)%4 == 1 {
 		return false
 	}
-	// Allow standard base64 alphabet + padding
+	// Standard and URL-safe alphabets, padding only at the end.
 	for i, c := range s {
 		switch {
 		case c >= 'A' && c <= 'Z':
 		case c >= 'a' && c <= 'z':
 		case c >= '0' && c <= '9':
-		case c == '+' || c == '/':
+		case c == '+' || c == '/' || c == '-' || c == '_':
 		case c == '=' && i >= len(s)-2: // padding only at end
 		default:
 			return false
@@ -100,13 +104,23 @@ func LooksLikeBase64(s string) bool {
 	return true
 }
 
-// DecodeBase64 decodes standard base64 (with padding). It returns the input unchanged if decoding fails.
+// DecodeBase64 decodes base64 in the alphabets real subscriptions use:
+// standard and URL-safe, each with or without "=" padding. This replaces a
+// strict StdEncoding-only decode that rejected both unpadded payloads (very
+// common for vmess and ss userinfo) and URL-safe payloads, dropping usable
+// configs at parse time.
 func DecodeBase64(s string) ([]byte, error) {
-	b, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		return nil, errors.ErrInvalidEncoding
+	for _, enc := range []*base64.Encoding{
+		base64.StdEncoding,
+		base64.RawStdEncoding,
+		base64.URLEncoding,
+		base64.RawURLEncoding,
+	} {
+		if b, err := enc.DecodeString(s); err == nil {
+			return b, nil
+		}
 	}
-	return b, nil
+	return nil, errors.ErrInvalidEncoding
 }
 
 // DecodeBase64URL decodes base64url (no padding, URL-safe alphabet).

@@ -11,6 +11,8 @@ const (
 	StageTLS       = "tls"
 	StageProtocol  = "protocol"
 	StageProxy     = "proxy"
+	StageDomain    = "domain"
+	StageStability = "stability"
 	StageCompleted = "completed"
 )
 
@@ -25,12 +27,31 @@ const (
 )
 
 // LatencyBreakdown holds timing for each test stage.
+//
+// Response is the median of the end-to-end passes (the proxied HTTP request):
+// the number a user actually feels, and the value the served list is ordered
+// by. Total is the wall time of the whole test run — every stage, every
+// stability probe, process spawns included — and is NOT a latency.
 type LatencyBreakdown struct {
 	Connect   time.Duration `json:"connect,omitempty" yaml:"connect,omitempty"`
 	TLS       time.Duration `json:"tls,omitempty" yaml:"tls,omitempty"`
 	Handshake time.Duration `json:"handshake,omitempty" yaml:"handshake,omitempty"`
 	Response  time.Duration `json:"response,omitempty" yaml:"response,omitempty"`
 	Total     time.Duration `json:"total,omitempty" yaml:"total,omitempty"`
+}
+
+// EffectiveLatency returns the number to show as "latency": the measured
+// end-to-end response latency when there is one, otherwise the total run
+// duration, otherwise the TCP connect time. It keeps the report formatters
+// and the daemon on one definition.
+func (l LatencyBreakdown) EffectiveLatency() time.Duration {
+	if l.Response > 0 {
+		return l.Response
+	}
+	if l.Total > 0 {
+		return l.Total
+	}
+	return l.Connect
 }
 
 // TestMetrics holds optional performance measurements.
@@ -42,17 +63,17 @@ type TestMetrics struct {
 
 // TestResult captures the outcome of testing a single configuration.
 type TestResult struct {
-	ID        string             `json:"id" yaml:"id"`                              // unique per-config identifier
-	Config    ProxyConfig        `json:"config" yaml:"config"`
-	Status    TestStatus         `json:"status" yaml:"status"`
-	Stage     string             `json:"stage" yaml:"stage"`                        // last stage attempted
-	Latencies LatencyBreakdown   `json:"latencies" yaml:"latencies"`
-	Errors    []string           `json:"errors,omitempty" yaml:"errors,omitempty"`
-	Metrics   TestMetrics        `json:"metrics,omitempty" yaml:"metrics,omitempty"`
-	Timestamp time.Time          `json:"timestamp" yaml:"timestamp"`
-	TestID    string             `json:"test_id" yaml:"test_id"`                    // run-level identifier
-	PortUsed  int                `json:"port_used,omitempty" yaml:"port_used,omitempty"`
-	Retries   int                `json:"retries,omitempty" yaml:"retries,omitempty"`
+	ID        string           `json:"id" yaml:"id"` // unique per-config identifier
+	Config    ProxyConfig      `json:"config" yaml:"config"`
+	Status    TestStatus       `json:"status" yaml:"status"`
+	Stage     string           `json:"stage" yaml:"stage"` // last stage attempted
+	Latencies LatencyBreakdown `json:"latencies" yaml:"latencies"`
+	Errors    []string         `json:"errors,omitempty" yaml:"errors,omitempty"`
+	Metrics   TestMetrics      `json:"metrics,omitempty" yaml:"metrics,omitempty"`
+	Timestamp time.Time        `json:"timestamp" yaml:"timestamp"`
+	TestID    string           `json:"test_id" yaml:"test_id"` // run-level identifier
+	PortUsed  int              `json:"port_used,omitempty" yaml:"port_used,omitempty"`
+	Retries   int              `json:"retries,omitempty" yaml:"retries,omitempty"`
 }
 
 // Summary aggregates results across an entire test run.

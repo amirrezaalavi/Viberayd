@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/amirrezaalavi/Viberayd/internal/models"
+	"github.com/amirrezaalavi/Viberayd/pkg/parser"
 )
 
 func TestCountByState(t *testing.T) {
@@ -73,14 +75,74 @@ func TestWriteOutputFile(t *testing.T) {
 	if contains(lines, "trojan://") {
 		t.Errorf("output should not contain failed config")
 	}
-	if !contains(lines, "124ms") {
-		t.Errorf("output should include latency: %s", lines)
+	// Latency must never be embedded in the share link: a line such as
+	// "vmess://<base64> 55ms" is not decodable and corrupts the /sub feed.
+	if contains(lines, "ms") {
+		t.Errorf("output must not contain latency annotations: %s", lines)
 	}
-	if !contains(lines, "vless://a@host:443") {
-		t.Errorf("missing vless config")
+	// Ascending latency order: b (55ms) before a (124ms).
+	want := "vmess://base64stuff\nvless://a@host:443?encryption=none#A\n"
+	if lines != want {
+		t.Errorf("unexpected output:\n got %q\nwant %q", lines, want)
 	}
-	if !contains(lines, "vmess://base64stuff 55ms") {
-		t.Errorf("missing vmess config with latency: %s", lines)
+
+	// The latency sidecar keeps the measurement available without touching
+	// the share link.
+	csvData, err := os.ReadFile(filepath.Join(dir, "working.csv"))
+	if err != nil {
+		t.Fatalf("read latency sidecar: %v", err)
+	}
+	if got, wantCSV := string(csvData), "vmess://base64stuff,55\nvless://a@host:443?encryption=none#A,124\n"; got != wantCSV {
+		t.Errorf("unexpected sidecar:\n got %q\nwant %q", got, wantCSV)
+	}
+}
+
+// TestWriteOutputFileStrictRoundTrip is the regression guard for the corrupted
+// subscription: every served line must parse back as a share link with the
+// same strict parser used on input.
+func TestWriteOutputFileStrictRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	outputPath := filepath.Join(dir, "working.txt")
+
+	d := &Daemon{
+		Config: &Config{Daemon: DaemonConfig{OutputFile: outputPath}},
+		State:  NewState(),
+	}
+
+	rawLinks := []string{
+		"vmess://eyJ2IjoiMiIsInBzIjoiQ0YtMSIsImFkZCI6IjEuMS4xLjEiLCJwb3J0IjoiNDQzIiwiaWQiOiJhMGIxYzJkMy1lNGY1LTY3ODktYWJjZC1lZjAxMjM0NTY3ODkiLCJhaWQiOiIwIiwic2N5IjoiYXV0byIsIm5ldCI6InRjcCJ9",
+		"vless://b1c2d3e4-f5a6-7890-bcde-f01234567890@3.3.3.3:443?security=reality&encryption=none&pbk=HrcXRHtsitc_AVlN-_8fZuRgaP-Mqa_9JJotI9OnkVc&fp=chrome&sni=example.com&type=tcp#R-US",
+		"trojan://secret@4.4.4.4:443?security=tls&sni=example.org&type=tcp#T-1",
+		"ss://YWVzLTI1Ni1nY206cGFzcw==@2.2.2.2:8388#SS-JP",
+	}
+	for i, raw := range rawLinks {
+		d.State.Configs[string(rune('a'+i))] = &ConfigEntry{Raw: raw, State: StateWorking, LatencyMs: (i + 1) * 10}
+	}
+
+	d.writeOutputFile()
+
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+
+	served := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		served++
+		cfg, err := parser.ParseSingle(line)
+		if err != nil {
+			t.Errorf("served line does not parse back as a share link: %q: %v", line, err)
+			continue
+		}
+		if cfg.Raw != line {
+			t.Errorf("round-trip changed the link: %q -> %q", line, cfg.Raw)
+		}
+	}
+	if served != len(rawLinks) {
+		t.Errorf("served %d links, want %d", served, len(rawLinks))
 	}
 }
 

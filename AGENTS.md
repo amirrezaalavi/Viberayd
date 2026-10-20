@@ -133,7 +133,8 @@ failed  → (next cycle)  → working | failed | unreachable
 
 ```
 DAEMON_URLS_FILE=urls.txt         # one subscription URL per line
-DAEMON_OUTPUT_FILE=working.txt    # overwritten each cycle: <raw-uri> <latency-ms>
+DAEMON_OUTPUT_FILE=working.txt    # overwritten each cycle: one verbatim <raw-uri> per line (served as /sub)
+                                  # latency goes to the sibling working.csv (<raw-uri>,<latency-ms>) and state.json
 DAEMON_STATE_FILE=state.json      # persisted config state
 DAEMON_CYCLE_SLEEP=300            # seconds between cycles (min 10, default 300)
 DAEMON_PARALLEL=10                # concurrent xray tests (1-20, default 10)
@@ -142,6 +143,13 @@ DAEMON_DEPTH=standard             # quick | standard | full | comprehensive
 DAEMON_KEEP_SUCCESSFUL=true       # re-test working configs
 DAEMON_RETEST_INTERVAL=1800       # seconds before re-testing a working config
 DAEMON_MAX_LATENCY_MS=0           # reject configs slower than N ms (0 = disabled)
+DAEMON_PORT_BASE=10820            # first local SOCKS port for xray tests (set per instance)
+DAEMON_STABILITY_PROBES=2         # end-to-end verifications a config must pass (1 = single sample)
+DAEMON_MAX_XRAY_TESTS=1200        # cap on TCP survivors sent to the deep stages per cycle (0 = no cap)
+DAEMON_DOMAINS=https://...        # comma-separated full-depth content-check URLs
+DAEMON_DOMAIN_TIMEOUT=5           # seconds per domain fetch
+DAEMON_DOMAIN_QUORUM=2            # domains that must pass for the config to pass
+DAEMON_DOMAIN_MIN_BYTES=4096      # minimum body bytes for a domain to count as passed
 HTTP_ENABLED=false                # enable HTTP servers
 HTTP_PORT=8080                    # subscription endpoint port
 HTTP_SUB_PATH=/sub                # GET /sub returns base64 of working.txt

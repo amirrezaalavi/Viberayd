@@ -27,6 +27,15 @@ type XrayTestConfig struct {
 	Depth    models.TestDepth
 	XrayBin  string
 	PortBase int
+	// Full-depth domain content check (see tester.CheckDomains). Empty
+	// DomainURLs disables the domain stage (used by tests, not the daemon).
+	DomainURLs     []string
+	DomainTimeout  time.Duration
+	DomainMinBytes int64
+	DomainQuorum   int
+	// StabilityProbes is how many independent end-to-end verifications a
+	// config must pass. 1 (or 0) keeps the single-sample behaviour.
+	StabilityProbes int
 }
 
 func TCPPing(ctx context.Context, candidates map[string]models.ProxyConfig, timeout time.Duration) map[string]TCPResult {
@@ -66,6 +75,21 @@ func TCPPing(ctx context.Context, candidates map[string]models.ProxyConfig, time
 	return results
 }
 
+// resultLatencyMs is the latency the daemon records for a config and orders
+// the served list by: the measured end-to-end (proxied request) latency, i.e.
+// the median of the stability passes.
+//
+// It used to be the TOTAL run duration (every stage, every probe, process
+// spawns), so a link's position in /sub reflected how long the test took,
+// not how fast the tunnel is — a slow-to-test but fast tunnel sorted behind a
+// fast-to-test but slow one.
+func resultLatencyMs(res models.TestResult) int {
+	if ms := int(res.Latencies.Response.Milliseconds()); ms > 0 {
+		return ms
+	}
+	return int(res.Latencies.Total.Milliseconds())
+}
+
 func XrayTest(ctx context.Context, configs []NamedConfig, cfg XrayTestConfig) []TestResult {
 	if configs == nil {
 		return nil
@@ -84,6 +108,11 @@ func XrayTest(ctx context.Context, configs []NamedConfig, cfg XrayTestConfig) []
 	pipeline.ProtoTimeout = cfg.Timeout
 	pipeline.XrayTimeout = cfg.Timeout
 	pipeline.XrayBin = cfg.XrayBin
+	pipeline.DomainURLs = cfg.DomainURLs
+	pipeline.DomainTimeout = cfg.DomainTimeout
+	pipeline.DomainMinBytes = cfg.DomainMinBytes
+	pipeline.DomainQuorum = cfg.DomainQuorum
+	pipeline.StabilityProbes = cfg.StabilityProbes
 
 	for _, item := range configs {
 		wg.Add(1)
@@ -102,15 +131,15 @@ func XrayTest(ctx context.Context, configs []NamedConfig, cfg XrayTestConfig) []
 			}
 			defer pm.Release(port)
 
-			testCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+			// The pipeline runs several stages, each with its own timeout;
+			// a single cfg.Timeout wrapper cancelled the later stages (and
+			// every extra stability probe) on slower configs.
+			testCtx, cancel := context.WithTimeout(ctx, pipeline.Budget())
 			defer cancel()
 
 			res := pipeline.Run(testCtx, c, port)
 
-			latency := int(res.Latencies.Total.Milliseconds())
-			if latency == 0 && res.Latencies.Response > 0 {
-				latency = int(res.Latencies.Response.Milliseconds())
-			}
+			latency := resultLatencyMs(res)
 
 			tr := TestResult{
 				Hash:      h,

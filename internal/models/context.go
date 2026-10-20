@@ -3,13 +3,20 @@ package models
 import "time"
 
 // TestDepth controls how thoroughly each configuration is tested.
+// Ladder (each level includes everything above it):
+// quick    = TCP dial + TLS handshake + protocol probe (no subprocess)
+// standard = quick + xray real-delay test (TTFB through the proxy, 2xx required)
+// full     = standard + multi-domain content check (quorum over real websites)
 type TestDepth string
 
 const (
-	DepthQuick         TestDepth = "quick"         // TCP only
-	DepthStandard      TestDepth = "standard"      // TCP + TLS
-	DepthFull          TestDepth = "full"          // TCP + TLS + Protocol
-	DepthComprehensive TestDepth = "comprehensive" // Full + Xray proxy test
+	DepthQuick    TestDepth = "quick"    // TCP + TLS + Protocol
+	DepthStandard TestDepth = "standard" // Quick + xray real-delay
+	DepthFull     TestDepth = "full"     // Standard + domain content check
+	// DepthComprehensive is a deprecated alias of DepthFull, kept so existing
+	// DAEMON_DEPTH=comprehensive deployments keep working. New code must use
+	// DepthFull; the pipeline normalizes this before gating.
+	DepthComprehensive TestDepth = "comprehensive" // alias of full (deprecated)
 )
 
 // IsValid reports whether d is a known test depth.

@@ -1,10 +1,13 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -49,6 +52,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		"cycle_sleep", d.Config.Daemon.CycleSleep(),
 		"parallel", d.Config.Daemon.Parallel,
 		"depth", d.Config.Daemon.Depth,
+		"port_base", d.Config.Daemon.PortBase,
 	)
 
 	if d.Config.HTTP.Enabled {
@@ -56,6 +60,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 			return fmt.Errorf("start http: %w", err)
 		}
 	}
+
+	// Publish the output file from the state we just loaded, before the first
+	// (possibly hours-long) cycle runs. Otherwise /sub keeps serving whatever
+	// the previous process left on disk, which may be stale or, as with the
+	// old " <latency>ms" format, unusable by clients.
+	d.writeOutputFile()
 
 	for {
 		select {
@@ -168,12 +178,19 @@ func (d *Daemon) runCycle(ctx context.Context) error {
 
 	var xrayResults []TestResult
 	if len(survivors) > 0 {
+		slog.Info("tcp survivors", "count", len(survivors))
+		survivors = limitSurvivors(survivors, tcpResults, d.Config.Daemon.MaxXrayTests)
 		xrayResults = XrayTest(ctx, survivors, XrayTestConfig{
-			Parallel: d.Config.Daemon.Parallel,
-			Timeout:  timeout,
-			Depth:    d.Config.Daemon.TestDepth(),
-			XrayBin:  "xray",
-			PortBase: 10820,
+			Parallel:        d.Config.Daemon.Parallel,
+			Timeout:         timeout,
+			Depth:           d.Config.Daemon.TestDepth(),
+			XrayBin:         "xray",
+			PortBase:        d.Config.Daemon.PortBase,
+			DomainURLs:      d.Config.Daemon.DomainList(),
+			DomainTimeout:   time.Duration(d.Config.Daemon.DomainTimeoutSec) * time.Second,
+			DomainMinBytes:  int64(d.Config.Daemon.DomainMinBytes),
+			DomainQuorum:    d.Config.Daemon.DomainQuorum,
+			StabilityProbes: d.Config.Daemon.StabilityProbes,
 		})
 	}
 
@@ -211,56 +228,78 @@ func (d *Daemon) mergeWithParsed(configs map[string]models.ProxyConfig, sourceUR
 	MergeIntoState(d.State, configs, sourceURL)
 }
 
+// writeOutputFile writes the working share links, one per line, in ascending
+// latency order (best/fastest first). Each line is the verbatim original share
+// link: latency is metadata, never part of the URI. An earlier version
+// appended " <n>ms" to the URI, which corrupted the subscription served by
+// /sub — a line like "vmess://<base64> 55ms" no longer decodes as a share
+// link, so strict consumers (and clients) dropped the config entirely.
+// Latency stays observable through state.json, the management API and the
+// optional CSV sidecar written next to this file.
 func (d *Daemon) writeOutputFile() {
 	path := d.Config.Daemon.OutputFile
 	if path == "" {
 		return
 	}
-	var lines []string
+
+	entries := make([]*ConfigEntry, 0, len(d.State.Configs))
 	for _, entry := range d.State.Configs {
 		if entry.State != StateWorking {
 			continue
 		}
-		line := entry.Raw
-		if entry.LatencyMs > 0 {
-			line = fmt.Sprintf("%s %dms", entry.Raw, entry.LatencyMs)
-		}
-		lines = append(lines, line)
+		entries = append(entries, entry)
 	}
-	// Sort ascending by latency (best/fastest configs first) so consumers of
-	// the subscription get the most reliable configs up front. Map iteration
-	// order is random; without this the /sub output order is nondeterministic.
-	sort.SliceStable(lines, func(i, j int) bool {
-		li, lj := parseLatencyMs(lines[i]), parseLatencyMs(lines[j])
-		if li == lj {
-			return lines[i] < lines[j]
+
+	// Sort ascending by latency. Map iteration order is random; without this
+	// the /sub output order is nondeterministic.
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].LatencyMs == entries[j].LatencyMs {
+			return entries[i].Raw < entries[j].Raw
 		}
-		return li < lj
+		return entries[i].LatencyMs < entries[j].LatencyMs
 	})
-	data := strings.Join(lines, "\n")
-	if len(lines) > 0 {
-		data += "\n"
+
+	var b strings.Builder
+	for _, entry := range entries {
+		b.WriteString(entry.Raw)
+		b.WriteByte('\n')
 	}
-	os.WriteFile(path, []byte(data), 0644)
+	if err := os.WriteFile(path, []byte(b.String()), 0644); err != nil {
+		slog.Warn("write output file", "path", path, "error", err)
+		return
+	}
+
+	d.writeLatencySidecar(path, entries)
 }
 
-// parseLatencyMs extracts the trailing "NNNms" latency annotation from a
-// working.txt line. Lines without an annotation are treated as +inf so they
-// sort after all measured configs.
-func parseLatencyMs(line string) int {
-	idx := strings.LastIndex(line, " ")
-	if idx < 0 {
-		return int(^uint(0) >> 1)
+// writeLatencySidecar writes "<raw-uri>,<latency_ms>" next to the output file
+// (e.g. working.txt -> working.csv) so latency remains available to operators
+// without being embedded in the share link. A URI containing a comma is
+// quoted by encoding/csv. Failures are logged and never abort the cycle: the
+// subscription file itself is already written.
+func (d *Daemon) writeLatencySidecar(outputPath string, entries []*ConfigEntry) {
+	ext := filepath.Ext(outputPath)
+	csvPath := strings.TrimSuffix(outputPath, ext) + ".csv"
+	if csvPath == outputPath {
+		return
 	}
-	s := line[idx+1:]
-	if !strings.HasSuffix(s, "ms") {
-		return int(^uint(0) >> 1)
+
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	for _, entry := range entries {
+		if err := w.Write([]string{entry.Raw, strconv.Itoa(entry.LatencyMs)}); err != nil {
+			slog.Warn("encode latency sidecar", "path", csvPath, "error", err)
+			return
+		}
 	}
-	n, err := strconv.Atoi(strings.TrimSuffix(s, "ms"))
-	if err != nil {
-		return int(^uint(0) >> 1)
+	w.Flush()
+	if err := w.Error(); err != nil {
+		slog.Warn("encode latency sidecar", "path", csvPath, "error", err)
+		return
 	}
-	return n
+	if err := os.WriteFile(csvPath, buf.Bytes(), 0644); err != nil {
+		slog.Warn("write latency sidecar", "path", csvPath, "error", err)
+	}
 }
 
 func (d *Daemon) shutdown() error {

@@ -205,6 +205,20 @@ func TestExport(t *testing.T) {
 	if !strings.Contains(string(data), "vmess") {
 		t.Error("valid configs should contain vmess")
 	}
+	// The exported line must be the verbatim original share link: a
+	// reconstructed URI would drop the vmess base64 JSON payload and the
+	// reality query parameters.
+	for _, r := range results {
+		if r.Status != models.StatusSuccess {
+			continue
+		}
+		if r.Config.Raw == "" {
+			t.Fatalf("fixture %s has empty Raw", r.ID)
+		}
+		if !strings.Contains(string(data), r.Config.Raw) {
+			t.Errorf("valid configs missing verbatim raw link for %s:\n%s", r.ID, data)
+		}
+	}
 
 	// failed/errors.log should contain the error
 	data, err = os.ReadFile(filepath.Join(tmp, ex.Timestamp.Format("20060102_150405"), "failed", "errors.log"))
@@ -216,30 +230,30 @@ func TestExport(t *testing.T) {
 	}
 }
 
-func TestConfigToURI(t *testing.T) {
-	tests := []struct {
-		name string
-		cfg  models.ProxyConfig
-		want string
-	}{
-		{
-			name: "ss",
-			cfg:  models.ProxyConfig{SS: &models.SSConfig{BaseConfig: models.BaseConfig{Server: "s", Port: 80, Name: "n"}, Method: "m", Password: "p"}},
-			want: "ss://m:p@s:80#n",
-		},
-		{
-			name: "trojan",
-			cfg:  models.ProxyConfig{Trojan: &models.TrojanConfig{BaseConfig: models.BaseConfig{Server: "s", Port: 443, Name: "n"}, Password: "p"}},
-			want: "trojan://p@s:443#n",
-		},
-	}
+// TestExportNeverReconstructsURIs guards the convention that exported links
+// are the original share strings: a vmess link whose payload cannot be
+// recovered from the parsed struct must still appear verbatim.
+func TestExportNeverReconstructsURIs(t *testing.T) {
+	raw := "vmess://eyJ2IjoiMiIsInBzIjoiQ0YtMSIsImFkZCI6IjEuMS4xLjEiLCJwb3J0IjoiNDQzIiwiaWQiOiJhMGIxYzJkMy1lNGY1LTY3ODktYWJjZC1lZjAxMjM0NTY3ODkiLCJhaWQiOiIwIiwic2N5IjoiYXV0byIsIm5ldCI6InRjcCJ9"
+	results := []models.TestResult{{
+		ID:     "vmess-1",
+		Config: models.ProxyConfig{Raw: raw, VMess: &models.VMessConfig{BaseConfig: models.BaseConfig{Server: "1.1.1.1", Port: 443, Protocol: models.ProtocolVMess}, UUID: "a0b1c2d3-e4f5-6789-abcd-ef0123456789"}},
+		Status: models.StatusSuccess,
+	}}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := configToURI(tt.cfg)
-			if got != tt.want {
-				t.Errorf("configToURI() = %q, want %q", got, tt.want)
-			}
-		})
+	tmp := t.TempDir()
+	ex := NewExport(tmp)
+	if err := ex.Run(results); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(tmp, ex.Timestamp.Format("20060102_150405"), "valid", "configs.txt"))
+	if err != nil {
+		t.Fatalf("read valid configs: %v", err)
+	}
+	if !strings.Contains(string(data), raw) {
+		t.Errorf("vmess raw link not preserved verbatim:\n%s", data)
+	}
+	if strings.Contains(string(data), "vmess://a0b1c2d3-e4f5-6789-abcd-ef0123456789@") {
+		t.Errorf("export reconstructed a URI instead of using Raw:\n%s", data)
 	}
 }
